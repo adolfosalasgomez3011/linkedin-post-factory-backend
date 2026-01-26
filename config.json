@@ -1,0 +1,142 @@
+{
+  "voice_guidelines": {
+    "forbidden_phrases": [
+      "I quit my job",
+      "I left corporate",
+      "my company",
+      "expert",
+      "guru",
+      "thought leader",
+      "I'm building GoalPraxis to solve"
+    ],
+    "required_language": {
+      "career_framing": [
+        "portfolio career",
+        "building ventures while exploring strategic opportunities",
+        "modern executive operating model",
+        "multiple value streams"
+      ],
+      "goalpraxis_mentions": [
+        "Co-founding GoalPraxis with partners who bring deep technology expertise",
+        "Building ventures",
+        "My role: operations strategy and business development"
+      ],
+      "positioning": [
+        "Operations & Technology Leader",
+        "C-Suite positioning",
+        "COO-track",
+        "Transforming mining performance"
+      ]
+    },
+    "tone": {
+      "style": "Direct, confident, authentic",
+      "perspective": "Proven operator sharing real insights",
+      "emotion": "Balanced - excited but grounded",
+      "technical_depth": "High but accessible"
+    }
+  },
+  "content_pillars": {
+    "asset_management": {
+      "percentage": 25,
+      "topics": [
+        "Mobile fleet optimization",
+        "Process plant reliability",
+        "Asset lifecycle strategies",
+        "TCO analysis",
+        "Replacement planning",
+        "Maintenance excellence",
+        "Equipment performance"
+      ]
+    },
+    "technology": {
+      "percentage": 30,
+      "topics": [
+        "AI and machine learning",
+        "IoT implementation",
+        "Predictive maintenance",
+        "Digital transformation",
+        "Analytics and insights",
+        "CMMS/EAM systems",
+        "Automation trends"
+      ]
+    },
+    "consulting": {
+      "percentage": 10,
+      "topics": [
+        "McKinsey methodology",
+        "SPIN selling",
+        "Trusted advisor approach",
+        "Problem-solving frameworks",
+        "Professional services",
+        "Strategic selling"
+      ]
+    },
+    "entrepreneurship": {
+      "percentage": 25,
+      "topics": [
+        "Building GoalPraxis journey",
+        "Portfolio career reality",
+        "Business development",
+        "Self-employment at 50",
+        "Learning from building",
+        "Wins and failures"
+      ]
+    },
+    "thought_leadership": {
+      "percentage": 10,
+      "topics": [
+        "Future of mining",
+        "LATAM market trends",
+        "Industry predictions",
+        "Leadership perspectives",
+        "Operational excellence"
+      ]
+    }
+  },
+  "post_formats": [
+    "Personal Story",
+    "Technical Deep-Dive",
+    "Controversial Take",
+    "Data-Driven Insight",
+    "Weekly Reflection",
+    "Advice/How-To",
+    "Industry Analysis",
+    "Lesson Learned"
+  ],
+  "target_audience": {
+    "primary": [
+      "Mining operations executives",
+      "COO/VP Operations/GM roles",
+      "Hiring managers in mining"
+    ],
+    "secondary": [
+      "Technology vendors",
+      "Consulting firms",
+      "Executive recruiters"
+    ],
+    "tertiary": [
+      "Mining professionals",
+      "Investors",
+      "Strategic partners"
+    ]
+  },
+  "engagement_strategy": {
+    "optimal_length": "1200-2000 characters",
+    "hook_lines": 3,
+    "hashtags": "5-8 relevant (not spammy)",
+    "cta_types": ["Question", "Call to share", "Invitation to connect"],
+    "posting_schedule": {
+      "monday": "Asset Management OR Technology OR Entrepreneurship",
+      "wednesday": "Entrepreneurship OR Asset Management OR Consulting",
+      "friday": "Technology OR Digital transformation",
+      "sunday": "Personal reflection OR Industry thought leadership"
+    }
+  },
+  "quality_standards": {
+    "voice_match_threshold": 85,
+    "min_length": 800,
+    "max_length": 2500,
+    "required_elements": ["Hook", "Body", "CTA"],
+    "forbidden_patterns": ["Salesy", "Generic", "Over-promotional"]
+  }
+}

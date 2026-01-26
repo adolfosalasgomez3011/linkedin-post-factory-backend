@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Post Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .result {
+            display: none;
+            margin-top: 20px;
+        }
+        
+        .result.show {
+            display: block;
+        }
+        
+        .post-content {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 15px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        
+        .score-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin: 10px 5px;
+        }
+        
+        .score-a { background: #4caf50; color: white; }
+        .score-b { background: #8bc34a; color: white; }
+        .score-c { background: #ffc107; color: black; }
+        .score-d { background: #ff9800; color: white; }
+        .score-f { background: #f44336; color: white; }
+        
+        .hashtags {
+            color: #667eea;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .error.show {
+            display: block;
+        }
+        
+        .copy-btn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .copy-btn:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 LinkedIn Post Generator</h1>
+            <p>Generate authentic, high-impact posts with AI</p>
+        </div>
+        
+        <div class="card">
+            <form id="generateForm">
+                <div class="form-group">
+                    <label for="pillar">Content Pillar</label>
+                    <select id="pillar" required>
+                        <option value="">Select a pillar...</option>
+                        <option value="technology">💻 Technology (30%)</option>
+                        <option value="asset_management">📊 Asset Management (25%)</option>
+                        <option value="entrepreneurship">🚀 Entrepreneurship (25%)</option>
+                        <option value="thought_leadership">💡 Thought Leadership (10%)</option>
+                        <option value="consulting">🎯 Consulting (10%)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="format">Post Format</label>
+                    <select id="format" required>
+                        <option value="">Select a format...</option>
+                        <option value="insight">📈 Insight (Data-driven observation)</option>
+                        <option value="story">📖 Story (Personal narrative)</option>
+                        <option value="contrarian">⚡ Contrarian (Challenge assumptions)</option>
+                        <option value="lesson">🎓 Lesson (What I learned)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="topic">Topic</label>
+                    <input type="text" id="topic" placeholder="e.g., AI in mining operations, portfolio diversification..." required>
+                </div>
+                
+                <button type="submit" class="btn" id="generateBtn">Generate Post</button>
+            </form>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Generating your post...</p>
+            </div>
+            
+            <div class="error" id="error"></div>
+            
+            <div class="result" id="result">
+                <h3>Your Generated Post:</h3>
+                <div class="post-content" id="postContent"></div>
+                <div>
+                    <span class="score-badge" id="scoreBadge"></span>
+                    <span id="hashtags" class="hashtags"></span>
+                </div>
+                <button class="copy-btn" onclick="copyPost()">📋 Copy Post</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://127.0.0.1:8000';
+        
+        document.getElementById('generateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const pillar = document.getElementById('pillar').value;
+            const format = document.getElementById('format').value;
+            const topic = document.getElementById('topic').value;
+            
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('result').classList.remove('show');
+            document.getElementById('error').classList.remove('show');
+            document.getElementById('generateBtn').disabled = true;
+            
+            try {
+                const response = await fetch(`${API_URL}/posts/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        pillar: pillar,
+                        format_type: format,
+                        topic: topic
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Display result
+                document.getElementById('postContent').textContent = data.text;
+                document.getElementById('hashtags').textContent = data.hashtags.join(' ');
+                
+                // Score badge
+                const scoreBadge = document.getElementById('scoreBadge');
+                const score = data.voice_score;
+                let grade = 'F';
+                let gradeClass = 'score-f';
+                
+                if (score >= 90) { grade = 'A'; gradeClass = 'score-a'; }
+                else if (score >= 80) { grade = 'B'; gradeClass = 'score-b'; }
+                else if (score >= 70) { grade = 'C'; gradeClass = 'score-c'; }
+                else if (score >= 60) { grade = 'D'; gradeClass = 'score-d'; }
+                
+                scoreBadge.textContent = `Voice Score: ${score}/100 (${grade})`;
+                scoreBadge.className = `score-badge ${gradeClass}`;
+                
+                document.getElementById('result').classList.add('show');
+                
+            } catch (error) {
+                document.getElementById('error').textContent = `Error: ${error.message}. Make sure the API server is running!`;
+                document.getElementById('error').classList.add('show');
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                document.getElementById('generateBtn').disabled = false;
+            }
+        });
+        
+        function copyPost() {
+            const postText = document.getElementById('postContent').textContent;
+            const hashtags = document.getElementById('hashtags').textContent;
+            const fullPost = `${postText}\n\n${hashtags}`;
+            
+            navigator.clipboard.writeText(fullPost).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,444 @@
+"""
+FastAPI Backend for LinkedIn Post Factory
+"""
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+import sys
+import uuid
+from pathlib import Path
+
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
+
+from core.post_generator import PostGenerator
+from core.voice_checker import VoiceChecker
+from core.content_tracker import ContentTracker
+from core.database_supabase import SupabaseDatabase
+
+app = FastAPI(
+    title="LinkedIn Post Factory API",
+    description="AI-powered LinkedIn content generation with voice consistency",
+    version="1.0.0"
+)
+
+# Health check endpoint for deployment platforms
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+# CORS middleware for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize services
+generator = PostGenerator()
+checker = VoiceChecker()
+tracker = ContentTracker()
+db = SupabaseDatabase()
+
+# ========================================
+# REQUEST/RESPONSE MODELS
+# ========================================
+
+class GeneratePostRequest(BaseModel):
+    pillar: str = Field(..., description="Content pillar (asset_management, technology, etc.)")
+    format_type: str = Field(..., description="Post format (insight, story, data, question, contrarian)")
+    topic: Optional[str] = Field(None, description="Specific topic for the post")
+    provider: str = Field("gemini", description="AI provider (gemini, gpt4)")
+
+class BatchGenerateRequest(BaseModel):
+    count: int = Field(10, ge=1, le=50, description="Number of posts to generate")
+    pillar_distribution: Optional[Dict[str, float]] = Field(None, description="Custom pillar distribution")
+    provider: Optional[str] = Field(None, description="Force specific provider (or randomize)")
+
+class CheckVoiceRequest(BaseModel):
+    text: str = Field(..., description="Post text to check")
+
+class UpdatePostRequest(BaseModel):
+    text: str = Field(..., description="Updated post text")
+    hashtags: Optional[List[str]] = Field(None, description="Updated hashtags")
+
+class PostResponse(BaseModel):
+    id: Optional[str] = None  # Changed to str for UUID
+    pillar: str
+    format: str
+    topic: Optional[str]
+    text: str
+    hashtags: List[str]  # List of hashtag strings
+    voice_score: Optional[float] = None
+    length: int
+    created_at: Optional[str] = None
+    status: str = "draft"
+
+class VoiceCheckResponse(BaseModel):
+    score: float
+    grade: str
+    issues: List[str]
+    components: Dict[str, bool]
+    length: int
+    length_status: str
+    recommendation: str
+
+class DashboardResponse(BaseModel):
+    overall_health: float
+    health_grade: str
+    summary: Dict
+    pillar_balance: Dict
+    posting_cadence: Dict
+    next_recommended_pillar: str
+
+# ========================================
+# ENDPOINTS
+# ========================================
+
+@app.get("/")
+async def root():
+    """API health check"""
+    return {
+        "status": "online",
+        "service": "LinkedIn Post Factory API",
+        "version": "1.0.0"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Detailed health check"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "services": {
+            "post_generator": "ready",
+            "voice_checker": "ready",
+            "content_tracker": "ready",
+            "database": "ready"
+        }
+    }
+
+@app.post("/posts/generate", response_model=PostResponse)
+async def generate_post(request: GeneratePostRequest):
+    """
+    Generate a single LinkedIn post
+    
+    - **pillar**: Content pillar (asset_management, technology, consulting, entrepreneurship, thought_leadership)
+    - **format_type**: Post format (insight, story, data, question, contrarian)
+    - **topic**: Optional specific topic
+    - **provider**: AI provider (claude, gpt4, gemini)
+    """
+    try:
+        # Generate post
+        post = generator.generate_post(
+            pillar=request.pillar,
+            format_type=request.format_type,
+            topic=request.topic,
+            provider=request.provider
+        )
+        
+        # Check voice
+        score, issues = checker.check_post(post["text"])
+        
+        # Save to database
+        post_id = str(uuid.uuid4())
+        
+        # Prepare hashtags - convert string to comma-separated for Supabase
+        hashtags_str = post["hashtags"] if isinstance(post["hashtags"], str) else " ".join(post["hashtags"])
+        
+        db.save_post({
+            "id": post_id,
+            "pillar": post["pillar"],
+            "format": post["format"],
+            "topic": post.get("topic", ""),
+            "text": post["text"],
+            "hashtags": hashtags_str,
+            "voice_score": float(score),
+            "length": int(len(post["text"])),
+            "status": "draft"
+        })
+        
+        # Prepare hashtags for response - split string into list
+        hashtags_list = hashtags_str.split() if hashtags_str else []
+        
+        return PostResponse(
+            id=post_id,
+            pillar=post["pillar"],
+            format=post["format"],
+            topic=post.get("topic", ""),
+            text=post["text"],
+            hashtags=hashtags_list,
+            voice_score=score,
+            length=len(post["text"]),
+            created_at=datetime.now().isoformat(),
+            status="draft"
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+
+@app.post("/posts/batch")
+async def batch_generate(request: BatchGenerateRequest, background_tasks: BackgroundTasks):
+    """
+    Generate multiple posts in batch
+    
+    - **count**: Number of posts to generate (1-50)
+    - **pillar_distribution**: Optional custom distribution
+    - **provider**: Optional forced provider
+    """
+    try:
+        posts = generator.batch_generate(
+            count=request.count,
+            pillar_distribution=request.pillar_distribution
+        )
+        
+        results = []
+        for post in posts:
+            # Check voice
+            score, _ = checker.check_post(post["text"])
+            
+            # Save to database
+            post_id = str(uuid.uuid4())
+            db.save_post({
+                "id": post_id,
+                "pillar": post["pillar"],
+                "format": post["format"],
+                "topic": post.get("topic"),
+                "text": post["text"],
+                "hashtags": post["hashtags"],
+                "voice_score": score,
+                "length": len(post["text"]),
+                "status": "draft"
+            })
+            
+            results.append({
+                "id": post_id,
+                "pillar": post["pillar"],
+                "format": post["format"],
+                "voice_score": score,
+                "length": len(post["text"]),
+                "status": "draft"
+            })
+        
+        return {
+            "generated": len(results),
+            "posts": results
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch generation failed: {str(e)}")
+
+@app.post("/posts/check-voice", response_model=VoiceCheckResponse)
+async def check_voice(request: CheckVoiceRequest):
+    """
+    Check voice authenticity of post text
+    
+    Returns score (0-100), grade (A-F), issues, and recommendations
+    """
+    try:
+        report = checker.get_detailed_report(request.text)
+        
+        return VoiceCheckResponse(**report)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Voice check failed: {str(e)}")
+
+@app.get("/posts", response_model=List[PostResponse])
+async def list_posts(
+    limit: int = 20,
+    status: Optional[str] = None,
+    pillar: Optional[str] = None,
+    min_score: Optional[float] = None
+):
+    """
+    List all posts with optional filters
+    
+    - **limit**: Max posts to return
+    - **status**: Filter by status (draft, scheduled, published)
+    - **pillar**: Filter by content pillar
+    - **min_score**: Filter by minimum voice score
+    """
+    try:
+        posts = db.get_posts(limit=limit, status=status)
+        
+        results = []
+        for post in posts:
+            # Apply filters
+            if pillar and post.get('pillar') != pillar:
+                continue
+            if min_score and (post.get('voice_score') is None or post.get('voice_score') < min_score):
+                continue
+            
+            # Parse hashtags
+            hashtags = post.get('hashtags', '').split(',') if post.get('hashtags') else []
+            
+            results.append(PostResponse(
+                id=post.get('id'),
+                pillar=post.get('pillar'),
+                format=post.get('format'),
+                topic=post.get('topic'),
+                text=post.get('text'),
+                hashtags=hashtags,
+                voice_score=post.get('voice_score'),
+                length=post.get('length'),
+                created_at=post.get('created_at'),
+                status=post.get('status', 'draft')
+            ))
+        
+        return results
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list posts: {str(e)}")
+
+@app.get("/posts/{post_id}", response_model=PostResponse)
+async def get_post(post_id: str):
+    """Get specific post by ID"""
+    try:
+        post = db.get_post(post_id)
+        
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        hashtags = post.get('hashtags', '').split(',') if post.get('hashtags') else []
+        
+        return PostResponse(
+            id=post.get('id'),
+            pillar=post.get('pillar'),
+            format=post.get('format'),
+            topic=post.get('topic'),
+            text=post.get('text'),
+            hashtags=hashtags,
+            voice_score=post.get('voice_score'),
+            length=post.get('length'),
+            created_at=post.get('created_at'),
+            status=post.get('status', 'draft')
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get post: {str(e)}")
+
+@app.put("/posts/{post_id}", response_model=PostResponse)
+async def update_post(post_id: str, request: UpdatePostRequest):
+    """Update post text and/or hashtags"""
+    try:
+        # Get existing post
+        post = db.get_post(post_id)
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+        
+        # Check new voice score
+        score, _ = checker.check_post(request.text)
+        
+        # Update post
+        update_data = {
+            "text": request.text,
+            "voice_score": score,
+            "length": len(request.text)
+        }
+        
+        if request.hashtags:
+            update_data["hashtags"] = ",".join(request.hashtags)
+        
+        db.update_post(post_id, **update_data)
+        
+        hashtags = request.hashtags or post.get('hashtags', '').split(',')
+        
+        return PostResponse(
+            id=post_id,
+            pillar=post.get('pillar'),
+            format=post.get('format'),
+            topic=post.get('topic'),
+            text=request.text,
+            hashtags=hashtags,
+            voice_score=score,
+            length=len(request.text),
+            created_at=post.get('created_at'),
+            status=post.get('status', 'draft')
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update post: {str(e)}")
+
+@app.delete("/posts/{post_id}")
+async def delete_post(post_id: str):
+    """Delete post by ID"""
+    try:
+        db.delete_post(post_id)
+        return {"message": f"Post {post_id} deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete post: {str(e)}")
+
+@app.get("/dashboard", response_model=DashboardResponse)
+async def get_dashboard():
+    """
+    Get content health dashboard
+    
+    Returns overall health score, pillar balance, posting cadence, and recommendations
+    """
+    try:
+        dashboard = tracker.get_dashboard()
+        
+        return DashboardResponse(**dashboard)
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get dashboard: {str(e)}")
+
+@app.get("/recommendations/next-pillar")
+async def get_next_pillar():
+    """Get recommended pillar for next post"""
+    try:
+        next_pillar = tracker.get_next_pillar_needed()
+        
+        return {
+            "recommended_pillar": next_pillar,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get recommendation: {str(e)}")
+
+@app.get("/stats")
+async def get_stats():
+    """Get overall statistics"""
+    try:
+        dashboard = tracker.get_dashboard()
+        posts = db.get_posts(limit=1000)
+        
+        # Calculate stats
+        total_posts = len(posts)
+        avg_score = sum(p.get('voice_score', 0) for p in posts if p.get('voice_score')) / total_posts if total_posts > 0 else 0
+        published = sum(1 for p in posts if p.get('status') == "published")
+        drafts = sum(1 for p in posts if p.get('status') == "draft")
+        
+        return {
+            "total_posts": total_posts,
+            "published": published,
+            "drafts": drafts,
+            "avg_voice_score": round(avg_score, 1),
+            "health": {
+                "score": dashboard["overall_health"],
+                "grade": dashboard["health_grade"]
+            },
+            "posting": {
+                "posts_per_week": dashboard["posting_cadence"]["posts_per_week"],
+                "consistency": dashboard["posting_cadence"]["consistency"]
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
