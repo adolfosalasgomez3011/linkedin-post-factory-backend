@@ -17,6 +17,7 @@ from core.post_generator import PostGenerator
 from core.voice_checker import VoiceChecker
 from core.content_tracker import ContentTracker
 from core.database_supabase import SupabaseDatabase
+from services.news_service import NewsService
 
 app = FastAPI(
     title="LinkedIn Post Factory API",
@@ -44,6 +45,7 @@ generator = PostGenerator()
 checker = VoiceChecker()
 tracker = ContentTracker()
 db = SupabaseDatabase()
+news_service = NewsService()
 
 # ========================================
 # REQUEST/RESPONSE MODELS
@@ -439,6 +441,24 @@ async def get_stats():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+@app.get("/news/trending")
+async def get_trending_news(category: str = "technology", count: int = 15):
+    """
+    Get trending news articles for content generation
+    
+    - **category**: News category (technology, ai, business, leadership)
+    - **count**: Number of articles to return (default: 15)
+    """
+    try:
+        articles = news_service.get_trending_articles(category=category, count=count)
+        return {
+            "articles": articles,
+            "count": len(articles),
+            "category": category
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch trending news: {str(e)}")
 
 
 if __name__ == "__main__":
