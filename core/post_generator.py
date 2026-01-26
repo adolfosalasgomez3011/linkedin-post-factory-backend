@@ -116,27 +116,31 @@ class PostGenerator:
         
         # Language instructions
         if language == "both":
-            language_instruction = """🌍 BILINGUAL POST REQUIREMENT:
-You MUST generate TWO complete, full-length versions of the post - one in English and one in Spanish.
+            language_instruction = """⚠️ MANDATORY BILINGUAL REQUIREMENT - READ CAREFULLY:
 
-Use this EXACT format:
+You MUST create TWO SEPARATE, COMPLETE posts. This is NON-NEGOTIABLE.
+
+OUTPUT FORMAT (copy this structure exactly):
 
 ### Post Text
 
-[Complete English post here - 1,200-1,500 characters]
+[Write the COMPLETE English post here. Full length: 1,200-1,500 characters. Include hook, body, evidence, and call to action.]
 
 ---
 
 ### Versión en Español
 
-[Complete Spanish post here - 1,200-1,500 characters]
+[Write the COMPLETE Spanish post here. Full length: 1,200-1,500 characters. Include hook, body, evidence, and call to action.]
 
-CRITICAL REQUIREMENTS:
-✓ Both versions must be COMPLETE standalone posts
-✓ Both must follow ALL voice guidelines and formatting rules
-✓ Spanish should be natural business Spanish, not literal translation
-✓ Both must have the same hook power and structure
-✓ Do NOT skip or abbreviate either version"""
+CRITICAL RULES - DO NOT SKIP:
+1. Generate BOTH English AND Spanish versions
+2. Each version must be 1,200-1,500 characters (FULL LENGTH)
+3. Spanish version is NOT a translation - write it as a native Spanish business post
+4. Both versions must follow all voice guidelines below
+5. Both versions need the same structure and hook power
+6. If you only generate one language, you have FAILED this task
+
+VERIFICATION: Count to make sure you wrote TWO complete posts separated by ---"""
         elif language == "spanish":
             language_instruction = "IDIOMA: Genera el post COMPLETAMENTE en español. Usa español de negocios natural y profesional."
         else:
