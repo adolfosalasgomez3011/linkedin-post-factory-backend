@@ -252,8 +252,8 @@ Generate the post text, then provide hashtags separately."""
             if text.startswith(prefix):
                 text = text[len(prefix):].strip()
         
-        # Split by various hashtag markers
-        split_markers = ["Hashtags:", "---", "**#"]
+        # Split by various hashtag markers (removed --- to preserve bilingual separator)
+        split_markers = ["Hashtags:", "**#"]
         post_text = text
         hashtag_section = ""
         
