@@ -532,6 +532,32 @@ class MediaGenerator:
         
         return bullets[:10]  # Max 10 bullets per slide
     
+    def _wrap_text(self, text: str, max_chars_per_line: int) -> List[str]:
+        """Helper to wrap text into lines"""
+        lines = []
+        
+        if not text.strip():
+            return [" "]
+        
+        for raw_line in text.split('\n'):
+            words = raw_line.split()
+            if not words:
+                lines.append(" ")
+                continue
+                
+            current_line = ""
+            for word in words:
+                if len(current_line) + len(word) + 1 <= max_chars_per_line:
+                    current_line += (word + " ")
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word + " "
+            if current_line:
+                lines.append(current_line)
+        
+        return lines
+    
     async def generate_slide_image(self, prompt: str, style: str) -> bytes:
         """Generate AI image for slide using Gemini (placeholder for now)"""
         try:
