@@ -8,8 +8,11 @@ import os
 
 class SupabaseDatabase:
     def __init__(self):
-        self.url = "https://nelzfeoznjuewtnibelt.supabase.co"
-        self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5lbHpmZW96bmp1ZXd0bmliZWx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3MTA4OTIsImV4cCI6MjA3OTI4Njg5Mn0.jrPqbCZDJDESs-8YeX1Pp9H6fmEB2IMa7r1NtCmnYFg"
+        self.url = os.getenv("SUPABASE_URL")
+        self.key = os.getenv("SUPABASE_KEY")
+        
+        if not self.url or not self.key:
+            raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
         
         self.headers = {
             "apikey": self.key,
