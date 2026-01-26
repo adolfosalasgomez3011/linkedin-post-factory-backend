@@ -504,6 +504,7 @@ class QRCodeRequest(BaseModel):
 class CarouselRequest(BaseModel):
     slides: List[Dict[str, str]]
     title: str
+    style: str = "professional"  # professional, relaxed, corporate, creative, minimal
     post_id: Optional[str] = None
     save_to_storage: bool = True
 
@@ -694,9 +695,10 @@ async def generate_carousel(request: CarouselRequest):
     if not MEDIA_ENABLED:
         raise HTTPException(status_code=501, detail="Media generation not available")
     try:
-        pdf_bytes = media_generator.generate_carousel_pdf(
+        pdf_bytes = await media_generator.generate_carousel_pdf(
             slides=request.slides,
-            title=request.title
+            title=request.title,
+            style=request.style
         )
         
         url = None

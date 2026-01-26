@@ -346,12 +346,51 @@ class MediaGenerator:
     def generate_carousel_pdf(
         self,
         slides: List[Dict[str, str]],
-        title: str
+        title: str,
+        style: str = "professional"
     ) -> bytes:
         """
-        Generate multi-page PDF carousel with bilingual content side-by-side
+        Generate multi-page PDF carousel with AI images and bilingual content
+        
+        Styles: professional, relaxed, corporate, creative, minimal
         """
-        print(f"DEBUG: Generating PDF for title '{title}' with {len(slides)} slides")
+        print(f"DEBUG: Generating PDF for title '{title}' with {len(slides)} slides, style: {style}")
+        
+        # Define color schemes for each style
+        styles = {
+            "professional": {
+                "bg": (0.12, 0.12, 0.12),
+                "accent": (0.29, 0.62, 1.0),  # Blue
+                "text": (1, 1, 1),
+                "secondary": (0.8, 0.8, 0.8)
+            },
+            "relaxed": {
+                "bg": (0.95, 0.94, 0.92),
+                "accent": (0.4, 0.7, 0.5),  # Green
+                "text": (0.2, 0.2, 0.2),
+                "secondary": (0.4, 0.4, 0.4)
+            },
+            "corporate": {
+                "bg": (0.05, 0.08, 0.15),
+                "accent": (0.0, 0.4, 0.7),  # Navy
+                "text": (1, 1, 1),
+                "secondary": (0.7, 0.7, 0.7)
+            },
+            "creative": {
+                "bg": (0.15, 0.05, 0.2),
+                "accent": (0.9, 0.3, 0.6),  # Pink
+                "text": (1, 1, 1),
+                "secondary": (0.9, 0.9, 0.9)
+            },
+            "minimal": {
+                "bg": (1, 1, 1),
+                "accent": (0, 0, 0),
+                "text": (0, 0, 0),
+                "secondary": (0.5, 0.5, 0.5)
+            }
+        }
+        
+        color_scheme = styles.get(style, styles["professional"])
         
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=letter)
@@ -360,79 +399,121 @@ class MediaGenerator:
         for idx, slide in enumerate(slides):
             print(f"DEBUG: Processing slide {idx+1}")
             
-            # Background gradient (simulated)
-            c.setFillColorRGB(0.12, 0.12, 0.12)
+            # Background
+            c.setFillColorRGB(*color_scheme["bg"])
             c.rect(0, 0, width, height, fill=1)
             
             # Slide number
-            c.setFillColorRGB(0.5, 0.5, 0.5)
+            c.setFillColorRGB(*color_scheme["secondary"])
             c.setFont("Helvetica", 12)
             c.drawString(width - 60, 30, f"{idx + 1}/{len(slides)}")
             
             # Title (centered)
             slide_title = slide.get('title', f'Slide {idx + 1}')
-            print(f"DEBUG: Slide title: {slide_title}")
-            c.setFillColorRGB(0.29, 0.62, 1.0)  # Brand blue
-            c.setFont("Helvetica-Bold", 32)
+            c.setFillColorRGB(*color_scheme["accent"])
+            c.setFont("Helvetica-Bold", 28)
             
-            # Center the title
-            title_width = c.stringWidth(str(slide_title), "Helvetica-Bold", 32)
+            title_width = c.stringWidth(str(slide_title), "Helvetica-Bold", 28)
             title_x = (width - title_width) / 2
-            c.drawString(title_x, height - 80, str(slide_title))
+            c.drawString(title_x, height - 60, str(slide_title))
             
-            # Get content and split by language if bilingual
-            content = slide.get('content', '') or " "
+            # Generate and insert AI image (40% of page height, centered)
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Create image prompt from slide title and content
+                image_prompt = f"{slide_title}"
+                img_bytes = loop.run_until_complete(self.generate_slide_image(image_prompt, style))
+                
+                img = Image.open(io.BytesIO(img_bytes))
+                
+                # Calculate dimensions (40% of page height)
+                img_height = height * 0.35
+                img_width = width * 0.7
+                
+                # Resize image to fit
+                img.thumbnail((int(img_width), int(img_height)), Image.Resampling.LANCZOS)
+                
+                # Save to temp buffer
+                img_buffer = io.BytesIO()
+                img.save(img_buffer, format='PNG')
+                img_buffer.seek(0)
+                
+                # Position image centered
+                img_x = (width - img.width) / 2
+                img_y = height - 120 - img.height
+                
+                c.drawImage(ImageReader(img_buffer), img_x, img_y, 
+                           width=img.width, height=img.height, mask='auto')
+                
+                content_start_y = img_y - 40
+            except Exception as e:
+                print(f"Image generation failed: {e}")
+                content_start_y = height - 200
+            
+            # Get content and format as bullets
             content_en = slide.get('content_en', '')
             content_es = slide.get('content_es', '')
             
-            # If explicit English/Spanish provided, use bilingual layout
+            # If bilingual content exists
             if content_en and content_es:
                 # Draw vertical divider
                 divider_x = width / 2
-                c.setStrokeColorRGB(0.29, 0.62, 1.0)
-                c.setLineWidth(2)
-                c.line(divider_x, height - 120, divider_x, 100)
+                c.setStrokeColorRGB(*color_scheme["accent"])
+                c.setLineWidth(1)
+                c.line(divider_x, content_start_y + 20, divider_x, 80)
                 
                 # Language labels
-                c.setFillColorRGB(0.29, 0.62, 1.0)
-                c.setFont("Helvetica-Bold", 14)
-                c.drawString(60, height - 120, "🇺🇸 ENGLISH")
-                c.drawString(divider_x + 30, height - 120, "🇪🇸 ESPAÑOL")
+                c.setFillColorRGB(*color_scheme["accent"])
+                c.setFont("Helvetica-Bold", 11)
+                c.drawString(50, content_start_y + 20, "🇺🇸 English")
+                c.drawString(divider_x + 25, content_start_y + 20, "🇪🇸 Español")
                 
-                # Content setup
-                c.setFillColorRGB(1, 1, 1)
+                # Content as bullets
+                c.setFillColorRGB(*color_scheme["text"])
+                c.setFont("Helvetica", 11)
+                
+                # Process English bullets (left)
+                bullets_en = self._format_as_bullets(content_en)
+                y_pos = content_start_y - 10
+                for bullet in bullets_en[:8]:
+                    c.drawString(50, y_pos, "•")
+                    wrapped = self._wrap_text(bullet, 28)
+                    for line in wrapped[:2]:
+                        c.drawString(65, y_pos, line.strip())
+                        y_pos -= 16
+                
+                # Process Spanish bullets (right)
+                bullets_es = self._format_as_bullets(content_es)
+                y_pos = content_start_y - 10
+                for bullet in bullets_es[:8]:
+                    c.drawString(divider_x + 25, y_pos, "•")
+                    wrapped = self._wrap_text(bullet, 28)
+                    for line in wrapped[:2]:
+                        c.drawString(divider_x + 40, y_pos, line.strip())
+                        y_pos -= 16
+            else:
+                # Single language - centered bullets
+                content = slide.get('content', content_en or content_es or '')
+                bullets = self._format_as_bullets(content)
+                
+                c.setFillColorRGB(*color_scheme["text"])
                 c.setFont("Helvetica", 13)
                 
-                # Process English side (left)
-                lines_en = self._wrap_text(content_en, 35)
-                y_position = height - 155
-                for line in lines_en[:18]:
-                    c.drawString(50, y_position, line.strip())
-                    y_position -= 24
-                
-                # Process Spanish side (right)
-                lines_es = self._wrap_text(content_es, 35)
-                y_position = height - 155
-                for line in lines_es[:18]:
-                    c.drawString(divider_x + 30, y_position, line.strip())
-                    y_position -= 24
-            else:
-                # Single language layout (original behavior)
-                c.setFillColorRGB(1, 1, 1)
-                c.setFont("Helvetica", 16)
-                
-                # Simple text wrapping logic
-                lines = self._wrap_text(content, 60)
-                y_position = height - 140
-                
-                # Write lines
-                for line in lines[:15]:
-                    c.drawString(50, y_position, line.strip())
-                    y_position -= 28
+                y_pos = content_start_y
+                for bullet in bullets[:10]:
+                    # Center each bullet
+                    bullet_text = f"• {bullet}"
+                    text_width = c.stringWidth(bullet_text, "Helvetica", 13)
+                    x_pos = (width - text_width) / 2
+                    c.drawString(x_pos, y_pos, bullet_text)
+                    y_pos -= 22
             
             # Border
-            c.setStrokeColorRGB(0.29, 0.62, 1.0)
-            c.setLineWidth(4)
+            c.setStrokeColorRGB(*color_scheme["accent"])
+            c.setLineWidth(3)
             c.rect(10, 10, width - 20, height - 20)
             
             c.showPage()
@@ -440,31 +521,97 @@ class MediaGenerator:
         c.save()
         return buffer.getvalue()
     
-    def _wrap_text(self, text: str, max_chars_per_line: int) -> List[str]:
-        """Helper to wrap text into lines"""
-        lines = []
-        
+    def _format_as_bullets(self, text: str) -> List[str]:
+        """Convert text into bullet points"""
         if not text.strip():
-            return [" "]
+            return []
         
-        for raw_line in text.split('\n'):
-            words = raw_line.split()
-            if not words:
-                lines.append(" ")
-                continue
-                
-            current_line = ""
+        # Split by newlines or periods for sentences
+        lines = text.replace('. ', '.\n').split('\n')
+        bullets = [line.strip() for line in lines if len(line.strip()) > 10]
+        
+        return bullets[:10]  # Max 10 bullets per slide
+    
+    async def generate_slide_image(self, prompt: str, style: str) -> bytes:
+        """Generate AI image for slide using Gemini (placeholder for now)"""
+        try:
+            # Note: Gemini doesn't generate images yet
+            # For production, integrate DALL-E or Stable Diffusion
+            # For now, create a styled placeholder
+            
+            img = Image.new('RGB', (800, 400), self._get_bg_color(style))
+            draw = ImageDraw.Draw(img)
+            
+            # Add gradient effect
+            for y in range(400):
+                factor = y / 400
+                base = self._get_bg_color(style)
+                accent = self._get_accent_color(style)
+                r = int(base[0] + (accent[0] - base[0]) * factor)
+                g = int(base[1] + (accent[1] - base[1]) * factor)
+                b = int(base[2] + (accent[2] - base[2]) * factor)
+                draw.line([(0, y), (800, y)], fill=(r, g, b))
+            
+            # Add prompt text
+            try:
+                font = ImageFont.truetype("arial.ttf", 32)
+            except:
+                font = ImageFont.load_default()
+            
+            # Wrap prompt text
+            words = prompt.split()
+            lines = []
+            current = []
             for word in words:
-                if len(current_line) + len(word) + 1 <= max_chars_per_line:
-                    current_line += (word + " ")
-                else:
-                    if current_line:
-                        lines.append(current_line)
-                    current_line = word + " "
-            if current_line:
-                lines.append(current_line)
-        
-        return lines
+                current.append(word)
+                if len(' '.join(current)) > 40:
+                    current.pop()
+                    lines.append(' '.join(current))
+                    current = [word]
+            if current:
+                lines.append(' '.join(current))
+            
+            y = 150
+            for line in lines[:3]:
+                bbox = draw.textbbox((0, 0), line, font=font)
+                text_w = bbox[2] - bbox[0]
+                x = (800 - text_w) / 2
+                draw.text((x, y), line, fill=(255, 255, 255), font=font)
+                y += 50
+            
+            output = io.BytesIO()
+            img.save(output, format='PNG')
+            return output.getvalue()
+            
+        except Exception as e:
+            print(f"Slide image generation error: {e}")
+            # Return simple colored rectangle
+            img = Image.new('RGB', (800, 400), (50, 50, 50))
+            output = io.BytesIO()
+            img.save(output, format='PNG')
+            return output.getvalue()
+    
+    def _get_bg_color(self, style: str) -> Tuple[int, int, int]:
+        """Get background color for style"""
+        colors = {
+            "professional": (30, 30, 30),
+            "relaxed": (242, 240, 235),
+            "corporate": (13, 20, 38),
+            "creative": (38, 13, 51),
+            "minimal": (255, 255, 255)
+        }
+        return colors.get(style, (30, 30, 30))
+    
+    def _get_accent_color(self, style: str) -> Tuple[int, int, int]:
+        """Get accent color for style"""
+        colors = {
+            "professional": (74, 158, 255),
+            "relaxed": (102, 179, 128),
+            "corporate": (0, 102, 179),
+            "creative": (230, 77, 153),
+            "minimal": (0, 0, 0)
+        }
+        return colors.get(style, (74, 158, 255))
     
     async def generate_interactive_html(
         self,
