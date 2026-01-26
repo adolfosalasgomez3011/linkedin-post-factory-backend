@@ -8,7 +8,13 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import sys
 import uuid
+import base64
 from pathlib import Path
+
+# Helper for data URIs
+def to_data_uri(data: bytes, mime_type: str) -> str:
+    b64 = base64.b64encode(data).decode('utf-8')
+    return f"data:{mime_type};base64,{b64}"
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -18,6 +24,17 @@ from core.voice_checker import VoiceChecker
 from core.content_tracker import ContentTracker
 from core.database_supabase import SupabaseDatabase
 from api.services.news_service import NewsService
+
+# Try to import media generator (may not exist on all deployments)
+try:
+    from api.services.media_generator import media_generator
+    from api.services.storage_service import StorageService
+    MEDIA_ENABLED = True
+except ImportError:
+    print("Warning: Media generation services not available")
+    media_generator = None
+    StorageService = None
+    MEDIA_ENABLED = False
 
 app = FastAPI(
     title="LinkedIn Post Factory API",
@@ -46,6 +63,14 @@ checker = VoiceChecker()
 tracker = ContentTracker()
 db = SupabaseDatabase()
 news_service = NewsService()
+
+# Initialize storage service if available
+storage_service = None
+if MEDIA_ENABLED and StorageService:
+    try:
+        storage_service = StorageService(db.supabase if db and hasattr(db, 'supabase') else None)
+    except Exception as e:
+        print(f"Warning: Could not initialize storage service: {e}")
 
 # ========================================
 # REQUEST/RESPONSE MODELS
@@ -441,6 +466,311 @@ async def get_stats():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+# ============================================
+# MEDIA GENERATION REQUEST MODELS
+# ============================================
+
+class CodeImageRequest(BaseModel):
+    code: str
+    language: str = "python"
+    theme: str = "monokai"
+    title: Optional[str] = None
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+class ChartRequest(BaseModel):
+    chart_type: str  # bar, line, pie, scatter, area, funnel
+    data: Dict
+    title: str
+    theme: str = "plotly_dark"
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+class InfographicRequest(BaseModel):
+    title: str
+    stats: List[Dict[str, str]]
+    brand_color: str = "#4a9eff"
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+class QRCodeRequest(BaseModel):
+    url: str
+    logo_path: Optional[str] = None
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+class CarouselRequest(BaseModel):
+    slides: List[Dict[str, str]]
+    title: str
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+class AIImageRequest(BaseModel):
+    prompt: str
+    style: str = "professional"
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+class InteractiveRequest(BaseModel):
+    prompt: str
+    title: str
+    post_id: Optional[str] = None
+    save_to_storage: bool = True
+
+
+# ============================================
+# MEDIA GENERATION ENDPOINTS
+# ============================================
+
+@app.post("/media/generate-interactive")
+async def generate_interactive(request: InteractiveRequest):
+    """Generate interactive HTML demo"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        html_bytes = await media_generator.generate_interactive_html(
+            prompt=request.prompt,
+            title=request.title
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    html_bytes,
+                    request.post_id,
+                    "interactive",
+                    "html"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+        
+        if not url:
+            url = to_data_uri(html_bytes, "text/html")
+
+        return {"success": True, "url": url, "type": "interactive"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating interactive demo: {str(e)}")
+
+@app.post("/media/generate-code-image")
+async def generate_code_image(request: CodeImageRequest):
+    """Generate beautiful code snippet image"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        img_bytes = media_generator.generate_code_image(
+            code=request.code,
+            language=request.language,
+            theme=request.theme,
+            title=request.title
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    img_bytes,
+                    request.post_id,
+                    "code",
+                    "png"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+        
+        if not url:
+            url = to_data_uri(img_bytes, "image/png")
+
+        return {"success": True, "url": url, "type": "code"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating code image: {str(e)}")
+
+
+@app.post("/media/generate-chart")
+async def generate_chart(request: ChartRequest):
+    """Generate interactive-style chart"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        img_bytes = media_generator.generate_chart(
+            chart_type=request.chart_type,
+            data=request.data,
+            title=request.title,
+            theme=request.theme
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    img_bytes,
+                    request.post_id,
+                    "chart",
+                    "png"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+        
+        if not url:
+            url = to_data_uri(img_bytes, "image/png")
+
+        return {"success": True, "url": url, "type": "chart"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating chart: {str(e)}")
+
+
+@app.post("/media/generate-infographic")
+async def generate_infographic(request: InfographicRequest):
+    """Generate infographic with statistics"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        img_bytes = media_generator.generate_infographic(
+            title=request.title,
+            stats=request.stats,
+            brand_color=request.brand_color
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    img_bytes,
+                    request.post_id,
+                    "infographic",
+                    "png"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+        
+        if not url:
+            url = to_data_uri(img_bytes, "image/png")
+
+        return {"success": True, "url": url, "type": "infographic"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating infographic: {str(e)}")
+
+
+@app.post("/media/generate-qrcode")
+async def generate_qrcode(request: QRCodeRequest):
+    """Generate QR code"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        img_bytes = media_generator.generate_qr_code(
+            url=request.url,
+            logo_path=request.logo_path
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    img_bytes,
+                    request.post_id,
+                    "qrcode",
+                    "png"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+        
+        if not url:
+            url = to_data_uri(img_bytes, "image/png")
+
+        return {"success": True, "url": url, "type": "qrcode"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating QR code: {str(e)}")
+
+
+@app.post("/media/generate-carousel")
+async def generate_carousel(request: CarouselRequest):
+    """Generate PDF carousel"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        pdf_bytes = media_generator.generate_carousel_pdf(
+            slides=request.slides,
+            title=request.title
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    pdf_bytes,
+                    request.post_id,
+                    "carousel",
+                    "pdf"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+
+        if not url:
+            url = to_data_uri(pdf_bytes, "application/pdf")
+            
+        return {"success": True, "url": url, "type": "carousel"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating carousel: {str(e)}")
+
+
+@app.post("/media/generate-ai-image")
+async def generate_ai_image(request: AIImageRequest):
+    """Generate AI-powered image"""
+    if not MEDIA_ENABLED:
+        raise HTTPException(status_code=501, detail="Media generation not available")
+    try:
+        img_bytes = await media_generator.generate_ai_image(
+            prompt=request.prompt,
+            style=request.style
+        )
+        
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    img_bytes,
+                    request.post_id,
+                    "ai-image",
+                    "png"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+        
+        if not url:
+            url = to_data_uri(img_bytes, "image/png")
+
+        return {"success": True, "url": url, "type": "ai-image"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating AI image: {str(e)}")
+
+
+@app.get("/media/list/{post_id}")
+async def list_post_media(post_id: str):
+    """List all media assets for a post"""
+    if not MEDIA_ENABLED:
+        return {"media": []}
+    try:
+        if not storage_service:
+            return {"media": []}
+        
+        files = storage_service.list_post_media(post_id)
+        return {"post_id": post_id, "media": files}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error listing media: {str(e)}")
+
+
+# ============================================
+# NEWS & TRENDING ENDPOINTS
+# ============================================
 
 @app.get("/news/trending")
 async def get_trending_news(category: str = "technology", count: int = 15):
