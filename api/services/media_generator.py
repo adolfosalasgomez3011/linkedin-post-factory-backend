@@ -419,13 +419,9 @@ class MediaGenerator:
             
             # Generate and insert AI image (40% of page height, centered)
             try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
                 # Create image prompt from slide title and content
                 image_prompt = f"{slide_title}"
-                img_bytes = loop.run_until_complete(self.generate_slide_image(image_prompt, style))
+                img_bytes = self.generate_slide_image(image_prompt, style)
                 
                 img = Image.open(io.BytesIO(img_bytes))
                 
@@ -558,7 +554,7 @@ class MediaGenerator:
         
         return lines
     
-    async def generate_slide_image(self, prompt: str, style: str) -> bytes:
+    def generate_slide_image(self, prompt: str, style: str) -> bytes:
         """Generate AI image for slide using Gemini (placeholder for now)"""
         try:
             # Note: Gemini doesn't generate images yet
