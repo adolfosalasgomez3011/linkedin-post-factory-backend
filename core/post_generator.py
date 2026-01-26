@@ -52,6 +52,7 @@ class PostGenerator:
                      pillar: str,
                      format_type: str = "insight",
                      topic: Optional[str] = None,
+                     language: str = "english",
                      provider: str = "gemini") -> Dict:
         """
         Generate a LinkedIn post
@@ -60,13 +61,14 @@ class PostGenerator:
             pillar: Content pillar (asset_management, technology, consulting, entrepreneurship, thought_leadership)
             format_type: Post format (insight, story, data, question, contrarian)
             topic: Optional specific topic
+            language: Language (english, spanish, both)
             provider: AI provider (claude, gpt4, gemini)
             
         Returns:
             Dict with post text, metadata, and voice score
         """
         # Build prompt
-        prompt = self._build_prompt(pillar, format_type, topic)
+        prompt = self._build_prompt(pillar, format_type, topic, language)
         
         # Generate with selected provider
         if provider == "gemini":
@@ -95,7 +97,7 @@ class PostGenerator:
         
         return post_data
     
-    def _build_prompt(self, pillar: str, format_type: str, topic: Optional[str]) -> str:
+    def _build_prompt(self, pillar: str, format_type: str, topic: Optional[str], language: str = "english") -> str:
         """Build generation prompt with voice guidelines"""
         
         # Get pillar details
@@ -112,12 +114,42 @@ class PostGenerator:
         required = voice["required_language"]
         tone = voice["tone"]
         
+        # Language instructions
+        if language == "both":
+            language_instruction = """🌍 BILINGUAL POST REQUIREMENT:
+You MUST generate TWO complete, full-length versions of the post - one in English and one in Spanish.
+
+Use this EXACT format:
+
+### Post Text
+
+[Complete English post here - 1,200-1,500 characters]
+
+---
+
+### Versión en Español
+
+[Complete Spanish post here - 1,200-1,500 characters]
+
+CRITICAL REQUIREMENTS:
+✓ Both versions must be COMPLETE standalone posts
+✓ Both must follow ALL voice guidelines and formatting rules
+✓ Spanish should be natural business Spanish, not literal translation
+✓ Both must have the same hook power and structure
+✓ Do NOT skip or abbreviate either version"""
+        elif language == "spanish":
+            language_instruction = "IDIOMA: Genera el post COMPLETAMENTE en español. Usa español de negocios natural y profesional."
+        else:
+            language_instruction = "LANGUAGE: Generate the post in English only."
+        
         # Build prompt
         prompt = f"""Generate a LinkedIn post with these specifications:
 
 CONTENT PILLAR: {pillar}
 POST FORMAT: {format_type}
 TOPIC: {topic}
+
+{language_instruction}
 
 VOICE GUIDELINES:
 Style: {tone['style']}

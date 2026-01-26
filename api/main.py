@@ -53,6 +53,7 @@ class GeneratePostRequest(BaseModel):
     pillar: str = Field(..., description="Content pillar (asset_management, technology, etc.)")
     format_type: str = Field(..., description="Post format (insight, story, data, question, contrarian)")
     topic: Optional[str] = Field(None, description="Specific topic for the post")
+    language: Optional[str] = Field("english", description="Language (english, spanish, both)")
     provider: str = Field("gemini", description="AI provider (gemini, gpt4)")
 
 class BatchGenerateRequest(BaseModel):
@@ -139,6 +140,7 @@ async def generate_post(request: GeneratePostRequest):
             pillar=request.pillar,
             format_type=request.format_type,
             topic=request.topic,
+            language=request.language or "english",
             provider=request.provider
         )
         
