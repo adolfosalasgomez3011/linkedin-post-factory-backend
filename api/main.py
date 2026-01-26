@@ -17,7 +17,7 @@ from core.post_generator import PostGenerator
 from core.voice_checker import VoiceChecker
 from core.content_tracker import ContentTracker
 from core.database_supabase import SupabaseDatabase
-from services.news_service import NewsService
+from api.services.news_service import NewsService
 
 app = FastAPI(
     title="LinkedIn Post Factory API",
