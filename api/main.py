@@ -695,7 +695,7 @@ async def generate_carousel(request: CarouselRequest):
     if not MEDIA_ENABLED:
         raise HTTPException(status_code=501, detail="Media generation not available")
     try:
-        pdf_bytes = await media_generator.generate_carousel_pdf(
+        pdf_bytes = media_generator.generate_carousel_pdf(
             slides=request.slides,
             title=request.title,
             style=request.style
