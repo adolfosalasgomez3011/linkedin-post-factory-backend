@@ -349,7 +349,7 @@ class MediaGenerator:
         title: str
     ) -> bytes:
         """
-        Generate multi-page PDF carousel
+        Generate multi-page PDF carousel with bilingual content side-by-side
         """
         print(f"DEBUG: Generating PDF for title '{title}' with {len(slides)} slides")
         
@@ -369,50 +369,66 @@ class MediaGenerator:
             c.setFont("Helvetica", 12)
             c.drawString(width - 60, 30, f"{idx + 1}/{len(slides)}")
             
-            # Title
+            # Title (centered)
             slide_title = slide.get('title', f'Slide {idx + 1}')
             print(f"DEBUG: Slide title: {slide_title}")
             c.setFillColorRGB(0.29, 0.62, 1.0)  # Brand blue
-            c.setFont("Helvetica-Bold", 36)
-            c.drawString(50, height - 100, str(slide_title))
+            c.setFont("Helvetica-Bold", 32)
             
-            # Content
-            c.setFillColorRGB(1, 1, 1)
-            c.setFont("Helvetica", 16)
+            # Center the title
+            title_width = c.stringWidth(str(slide_title), "Helvetica-Bold", 32)
+            title_x = (width - title_width) / 2
+            c.drawString(title_x, height - 80, str(slide_title))
             
+            # Get content and split by language if bilingual
             content = slide.get('content', '') or " "
-            print(f"DEBUG: Slide content length: {len(content)}")
+            content_en = slide.get('content_en', '')
+            content_es = slide.get('content_es', '')
             
-            # Simple text wrapping logic
-            max_chars_per_line = 60
-            lines = []
-            
-            # Handle empty content gracefully
-            if not content.strip():
-                lines = [" "]
+            # If explicit English/Spanish provided, use bilingual layout
+            if content_en and content_es:
+                # Draw vertical divider
+                divider_x = width / 2
+                c.setStrokeColorRGB(0.29, 0.62, 1.0)
+                c.setLineWidth(2)
+                c.line(divider_x, height - 120, divider_x, 100)
+                
+                # Language labels
+                c.setFillColorRGB(0.29, 0.62, 1.0)
+                c.setFont("Helvetica-Bold", 14)
+                c.drawString(60, height - 120, "🇺🇸 ENGLISH")
+                c.drawString(divider_x + 30, height - 120, "🇪🇸 ESPAÑOL")
+                
+                # Content setup
+                c.setFillColorRGB(1, 1, 1)
+                c.setFont("Helvetica", 13)
+                
+                # Process English side (left)
+                lines_en = self._wrap_text(content_en, 35)
+                y_position = height - 155
+                for line in lines_en[:18]:
+                    c.drawString(50, y_position, line.strip())
+                    y_position -= 24
+                
+                # Process Spanish side (right)
+                lines_es = self._wrap_text(content_es, 35)
+                y_position = height - 155
+                for line in lines_es[:18]:
+                    c.drawString(divider_x + 30, y_position, line.strip())
+                    y_position -= 24
             else:
-                for raw_line in content.split('\n'):
-                    words = raw_line.split()
-                    if not words:
-                        lines.append(" ")
-                        continue
-                        
-                    current_line = ""
-                    for word in words:
-                        if len(current_line) + len(word) + 1 <= max_chars_per_line:
-                            current_line += (word + " ")
-                        else:
-                            lines.append(current_line)
-                            current_line = word + " "
-                    lines.append(current_line)
-
-            y_position = height - 160
-            
-            # Write lines
-            for i, line in enumerate(lines[:15]):  # Safety limit
-                # print(f"DEBUG: Writing line {i}: {line}")
-                c.drawString(50, y_position, line.strip())
-                y_position -= 28
+                # Single language layout (original behavior)
+                c.setFillColorRGB(1, 1, 1)
+                c.setFont("Helvetica", 16)
+                
+                # Simple text wrapping logic
+                lines = self._wrap_text(content, 60)
+                y_position = height - 140
+                
+                # Write lines
+                for line in lines[:15]:
+                    c.drawString(50, y_position, line.strip())
+                    y_position -= 28
             
             # Border
             c.setStrokeColorRGB(0.29, 0.62, 1.0)
@@ -423,6 +439,32 @@ class MediaGenerator:
         
         c.save()
         return buffer.getvalue()
+    
+    def _wrap_text(self, text: str, max_chars_per_line: int) -> List[str]:
+        """Helper to wrap text into lines"""
+        lines = []
+        
+        if not text.strip():
+            return [" "]
+        
+        for raw_line in text.split('\n'):
+            words = raw_line.split()
+            if not words:
+                lines.append(" ")
+                continue
+                
+            current_line = ""
+            for word in words:
+                if len(current_line) + len(word) + 1 <= max_chars_per_line:
+                    current_line += (word + " ")
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word + " "
+            if current_line:
+                lines.append(current_line)
+        
+        return lines
     
     async def generate_interactive_html(
         self,
