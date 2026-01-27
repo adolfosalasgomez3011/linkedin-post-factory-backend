@@ -756,7 +756,7 @@ class MediaGenerator:
             y_offset += 70
         
         # Watermark
-        watermark = \"AI Generated Visual\"
+        watermark = "AI Generated Visual"
         wm_bbox = draw.textbbox((0, 0), watermark, font=subtitle_font)
         wm_w = wm_bbox[2] - wm_bbox[0]
         draw.text((1200 - wm_w - 30, 635), watermark, fill=(255, 255, 255, 100), font=subtitle_font)
