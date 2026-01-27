@@ -424,12 +424,47 @@ class MediaGenerator:
         if is_bilingual_carousel:
             # Translate the ENGLISH cover title
             cover_title_es = self._translate_to_spanish(cover_title)
+            
             c.setFillColorRGB(*color_scheme["secondary"])
-            c.setFont("Helvetica-Oblique", 20)
-            title_width_es = c.stringWidth(cover_title_es, "Helvetica-Oblique", 20)
-            x_pos_es = (width - title_width_es) / 2
-            c.drawString(x_pos_es, y_pos, cover_title_es)
-            y_pos -= 35
+            c.setFont("Helvetica-Oblique", 18)
+            
+            # Wrap Spanish title if too long (max width 550px)
+            max_es_width = 550
+            if c.stringWidth(cover_title_es, "Helvetica-Oblique", 18) > max_es_width:
+                # Split into multiple lines
+                words = cover_title_es.split()
+                line1_words = []
+                line2_words = []
+                
+                for i, word in enumerate(words):
+                    test_line = ' '.join(line1_words + [word])
+                    if c.stringWidth(test_line, "Helvetica-Oblique", 18) <= max_es_width:
+                        line1_words.append(word)
+                    else:
+                        line2_words = words[i:]
+                        break
+                
+                # Draw line 1
+                line1 = ' '.join(line1_words)
+                if line1:
+                    title_width_es = c.stringWidth(line1, "Helvetica-Oblique", 18)
+                    x_pos_es = (width - title_width_es) / 2
+                    c.drawString(x_pos_es, y_pos, line1)
+                    y_pos -= 24
+                
+                # Draw line 2
+                line2 = ' '.join(line2_words)
+                if line2:
+                    title_width_es = c.stringWidth(line2, "Helvetica-Oblique", 18)
+                    x_pos_es = (width - title_width_es) / 2
+                    c.drawString(x_pos_es, y_pos, line2)
+                    y_pos -= 24
+            else:
+                # Single line
+                title_width_es = c.stringWidth(cover_title_es, "Helvetica-Oblique", 18)
+                x_pos_es = (width - title_width_es) / 2
+                c.drawString(x_pos_es, y_pos, cover_title_es)
+                y_pos -= 28
         
         # Generate cover image using Gemini
         try:
@@ -656,48 +691,27 @@ class MediaGenerator:
         return buffer.getvalue()
     
     def _translate_to_spanish(self, english_text: str) -> str:
-        """Simple Spanish translation for common carousel terms"""
-        # Common translations for carousel titles
-        translations = {
-            'ai-driven': 'impulsado por ia',
-            'personalized': 'personalizado',
-            'education': 'educación',
-            'platforms': 'plataformas',
-            'see': 'ver',
-            'user': 'usuario',
-            'growth': 'crecimiento',
-            'the': 'el/la',
-            'quantum': 'cuántico',
-            'breakthrough': 'avance',
-            'impact': 'impacto',
-            'era': 'era',
-            'driven': 'impulsado',
-            'technology': 'tecnología',
-            'digital': 'digital',
-            'transformation': 'transformación',
-            'innovation': 'innovación',
-            'future': 'futuro',
-            'business': 'negocio',
-            'data': 'datos'
-        }
-        
-        words = english_text.lower().split()
-        spanish_words = []
-        
-        for word in words:
-            clean = word.strip('.,!?;:')
-            # Try to find translation
-            found = False
-            for en, es in translations.items():
-                if en in clean.lower():
-                    spanish_words.append(es)
-                    found = True
-                    break
-            if not found:
-                spanish_words.append(word)  # Keep original if no translation
-        
-        result = ' '.join(spanish_words)
-        return result.title()
+        """Translate English text to proper Spanish using Gemini API"""
+        try:
+            # Configure Gemini if not already done
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if api_key:
+                genai.configure(api_key=api_key)
+            
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            prompt = f"Translate this to Spanish (maintain professional tone, keep it concise): {english_text}"
+            
+            response = model.generate_content(prompt)
+            spanish_text = response.text.strip()
+            
+            # Clean up any markdown or extra formatting
+            spanish_text = spanish_text.replace('**', '').replace('*', '').strip()
+            
+            return spanish_text
+        except Exception as e:
+            print(f"Translation error: {e}")
+            # Fallback to original text if translation fails
+            return english_text
     
     def _create_summary_title(self, text: str, max_words: int = 6) -> str:
         """Create a short, compelling title from longer text (6-8 words max)"""
