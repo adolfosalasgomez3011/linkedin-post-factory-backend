@@ -392,6 +392,9 @@ class MediaGenerator:
         
         color_scheme = styles.get(style, styles["professional"])
         
+        # Check if carousel is bilingual by looking at first slide
+        is_bilingual_carousel = len(slides) > 0 and bool(slides[0].get('content_en') and slides[0].get('content_es'))
+        
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=letter)
         width, height = letter
@@ -416,6 +419,19 @@ class MediaGenerator:
             x_pos = (width - line_width) / 2
             c.drawString(x_pos, y_pos, line)
             y_pos -= 45
+        
+        # Add Spanish translation if bilingual
+        if is_bilingual_carousel:
+            # Extract Spanish title from first slide's Spanish content
+            first_slide_es = slides[0].get('content_es', '')
+            if first_slide_es:
+                cover_title_es = self._create_summary_title(first_slide_es, max_words=8)
+                c.setFillColorRGB(*color_scheme["secondary"])
+                c.setFont("Helvetica-Oblique", 20)
+                title_width_es = c.stringWidth(cover_title_es, "Helvetica-Oblique", 20)
+                x_pos_es = (width - title_width_es) / 2
+                c.drawString(x_pos_es, y_pos, cover_title_es)
+                y_pos -= 35
         
         # Generate cover image using Gemini
         try:
@@ -509,27 +525,15 @@ class MediaGenerator:
                 c.drawString(title_x, title_y, slide_title)
                 title_y -= 30
             
-            # Spanish translation if bilingual (translate the ENGLISH title, not content)
+            # Spanish translation if bilingual (extract from Spanish content directly)
             if is_bilingual:
-                # Simple translation keywords for common words (fallback to similar structure)
-                translation_map = {
-                    'the': 'el/la', 'and': 'y', 'of': 'de', 'in': 'en', 'to': 'a',
-                    'era': 'era', 'quantum': 'cuántica', 'breakthrough': 'avance',
-                    'AI': 'IA', 'impact': 'impacto', 'driven': 'impulsado',
-                    'platforms': 'plataformas', 'see': 'ver', 'growth': 'crecimiento'
-                }
-                
-                # Create Spanish version (simple word-by-word attempt, or extract from content_es)
-                slide_title_es_words = []
-                for word in slide_title.lower().split():
-                    clean_word = word.strip('.,!?;:')
-                    slide_title_es_words.append(translation_map.get(clean_word, word))
-                
-                slide_title_es = ' '.join(slide_title_es_words).title()
-                
-                # If translation looks too similar to English, extract from Spanish content instead
-                if slide_title_es.lower() == slide_title.lower() and content_es:
+                # Extract Spanish title directly from Spanish content (same words as English title)
+                if content_es:
+                    # Create Spanish title from Spanish content using same word count
                     slide_title_es = self._create_summary_title(content_es, max_words=5)
+                else:
+                    # Fallback: use English title
+                    slide_title_es = slide_title
                 
                 c.setFillColorRGB(*color_scheme["secondary"])
                 c.setFont("Helvetica-Oblique", 14)
@@ -669,13 +673,21 @@ class MediaGenerator:
         return ' '.join(words).strip('.,!?;:')
     
     def _format_as_bullets(self, text: str) -> List[str]:
-        """Convert text into bullet points"""
+        """Convert text into bullet points, ensuring each ends with period"""
         if not text.strip():
             return []
         
         # Split by newlines or periods for sentences
         lines = text.replace('. ', '.\n').split('\n')
-        bullets = [line.strip() for line in lines if len(line.strip()) > 10]
+        bullets = []
+        
+        for line in lines:
+            line = line.strip()
+            if len(line) > 10:
+                # Ensure bullet ends with period for completeness
+                if not line.endswith(('.', '!', '?', ';')):
+                    line += '.'
+                bullets.append(line)
         
         return bullets[:10]  # Max 10 bullets per slide
     
