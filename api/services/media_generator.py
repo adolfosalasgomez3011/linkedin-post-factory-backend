@@ -402,18 +402,18 @@ class MediaGenerator:
         
         # Cover title (wrapped and centered)
         c.setFillColorRGB(*color_scheme["accent"])
-        c.setFont("Helvetica-Bold", 48)
+        c.setFont("Helvetica-Bold", 32)
         
         # Wrap title to fit page width
         max_width = width - 100
-        title_lines = self._wrap_title(title, "Helvetica-Bold", 48, max_width, c)
+        title_lines = self._wrap_title(title, "Helvetica-Bold", 32, max_width, c)
         
-        y_pos = height - 150
+        y_pos = height - 100
         for line in title_lines:
-            line_width = c.stringWidth(line, "Helvetica-Bold", 48)
+            line_width = c.stringWidth(line, "Helvetica-Bold", 32)
             x_pos = (width - line_width) / 2
             c.drawString(x_pos, y_pos, line)
-            y_pos -= 60
+            y_pos -= 40
         
         # Generate cover image using Gemini
         try:
@@ -431,7 +431,7 @@ class MediaGenerator:
             cover_buffer.seek(0)
             
             img_x = (width - cover_img.width) / 2
-            img_y = (height - y_pos - cover_img.height) / 2 + 50
+            img_y = y_pos - cover_img.height - 40
             
             c.drawImage(ImageReader(cover_buffer), img_x, img_y,
                        width=cover_img.width, height=cover_img.height, mask='auto')
@@ -453,21 +453,30 @@ class MediaGenerator:
             c.setFont("Helvetica", 12)
             c.drawString(width - 60, 30, f"{idx + 1}/{len(slides)}")
             
-            # Title (wrapped and centered)
-            slide_title = slide.get('title', f'Key Point {idx + 1}')
+            # Title (wrapped and centered) - Use content for meaningful title
+            slide_title = slide.get('title', '')
+            if not slide_title or slide_title.startswith('Key Point'):
+                # Extract first sentence from content as title
+                content_preview = slide.get('content_en', slide.get('content', ''))
+                first_sentence = content_preview.split('.')[0].strip()[:60]
+                slide_title = first_sentence if first_sentence else f'Point {idx + 1}'
+            
             c.setFillColorRGB(*color_scheme["accent"])
-            c.setFont("Helvetica-Bold", 28)
+            c.setFont("Helvetica-Bold", 24)
             
             # Wrap title to fit page
             max_title_width = width - 80
-            title_lines = self._wrap_title(slide_title, "Helvetica-Bold", 28, max_title_width, c)
+            title_lines = self._wrap_title(slide_title, "Helvetica-Bold", 24, max_title_width, c)
             
-            title_y = height - 50
+            title_y = height - 40
             for title_line in title_lines:
-                line_width = c.stringWidth(title_line, "Helvetica-Bold", 28)
+                line_width = c.stringWidth(title_line, "Helvetica-Bold", 24)
                 title_x = (width - line_width) / 2
                 c.drawString(title_x, title_y, title_line)
-                title_y -= 35
+                title_y -= 30
+            
+            # Calculate image start position after title
+            image_start_y = title_y - 20
             
             # Generate and insert AI image (40% of page height, centered)
             try:
@@ -478,9 +487,9 @@ class MediaGenerator:
                 
                 img = Image.open(io.BytesIO(img_bytes))
                 
-                # Calculate dimensions (40% of page height)
-                img_height = height * 0.35
-                img_width = width * 0.7
+                # Calculate dimensions (30% of page height for better spacing)
+                img_height = height * 0.28
+                img_width = width * 0.65
                 
                 # Resize image to fit
                 img.thumbnail((int(img_width), int(img_height)), Image.Resampling.LANCZOS)
@@ -490,14 +499,14 @@ class MediaGenerator:
                 img.save(img_buffer, format='PNG')
                 img_buffer.seek(0)
                 
-                # Position image centered
+                # Position image centered below title
                 img_x = (width - img.width) / 2
-                img_y = height - 120 - img.height
+                img_y = image_start_y - img.height
                 
                 c.drawImage(ImageReader(img_buffer), img_x, img_y, 
                            width=img.width, height=img.height, mask='auto')
                 
-                content_start_y = img_y - 40
+                content_start_y = img_y - 50
             except Exception as e:
                 print(f"Image generation failed: {e}")
                 content_start_y = height - 200
@@ -516,13 +525,13 @@ class MediaGenerator:
                 
                 # Language labels
                 c.setFillColorRGB(*color_scheme["accent"])
-                c.setFont("Helvetica-Bold", 11)
+                c.setFont("Helvetica-Bold", 12)
                 c.drawString(50, content_start_y + 20, "🇺🇸 English")
                 c.drawString(divider_x + 25, content_start_y + 20, "🇪🇸 Español")
                 
-                # Content as bullets
+                # Content as bullets (increased font size)
                 c.setFillColorRGB(*color_scheme["text"])
-                c.setFont("Helvetica", 11)
+                c.setFont("Helvetica", 12)
                 
                 # Process English bullets (left)
                 bullets_en = self._format_as_bullets(content_en)
@@ -532,7 +541,7 @@ class MediaGenerator:
                     wrapped = self._wrap_text(bullet, 28)
                     for line in wrapped[:2]:
                         c.drawString(65, y_pos, line.strip())
-                        y_pos -= 16
+                        y_pos -= 18
                 
                 # Process Spanish bullets (right)
                 bullets_es = self._format_as_bullets(content_es)
@@ -542,7 +551,7 @@ class MediaGenerator:
                     wrapped = self._wrap_text(bullet, 28)
                     for line in wrapped[:2]:
                         c.drawString(divider_x + 40, y_pos, line.strip())
-                        y_pos -= 16
+                        y_pos -= 18
             else:
                 # Single language - centered bullets
                 content = slide.get('content', content_en or content_es or '')
