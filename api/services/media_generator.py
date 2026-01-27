@@ -628,13 +628,76 @@ class MediaGenerator:
         return lines
     
     def generate_realistic_image(self, prompt: str) -> bytes:
-        """Generate professional gradient image (Vertex AI requires OAuth2 setup)"""
-        # Note: Real Imagen 3 generation requires Google Cloud OAuth2
-        # For now, creating professional styled placeholder
-        print(f"📸 Creating styled image for: {prompt[:60]}...")
-        
-        # Create high-quality 16:9 image
-        img = Image.new('RGB', (1200, 675), (15, 20, 30))
+        """Generate photorealistic image using Vertex AI Imagen 3"""
+        try:
+            import requests
+            from google.auth.transport.requests import Request
+            from google.auth import default
+            
+            # Vertex AI configuration (same as MCP server)
+            PROJECT_ID = 'gen-lang-client-0439499588'
+            LOCATION = 'us-central1'
+            MODEL_NAME = 'imagen-3.0-generate-001'
+            
+            print(f"🎨 Generating image via Vertex AI Imagen 3...")
+            print(f"   Prompt: {prompt[:80]}...")
+            
+            # Get credentials using Google Auth (same as MCP server)
+            credentials, project = default(
+                scopes=['https://www.googleapis.com/auth/cloud-platform']
+            )
+            
+            # Get access token
+            auth_req = Request()
+            credentials.refresh(auth_req)
+            access_token = credentials.token
+            
+            if not access_token:
+                raise Exception("Failed to get OAuth2 access token")
+            
+            # Build the Vertex AI endpoint URL
+            url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/{MODEL_NAME}:predict"
+            
+            # Prepare request data
+            data = {
+                "instances": [{"prompt": prompt}],
+                "parameters": {
+                    "sampleCount": 1,
+                    "aspectRatio": "16:9"
+                }
+            }
+            
+            # Make request with OAuth2 Bearer token
+            response = requests.post(
+                url,
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json'
+                },
+                json=data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                predictions = result.get('predictions', [])
+                
+                if predictions and len(predictions) > 0:
+                    base64_image = predictions[0].get('bytesBase64Encoded')
+                    if base64_image:
+                        image_bytes = base64.b64decode(base64_image)
+                        print(f"✅ Generated {len(image_bytes)} bytes via Vertex AI Imagen 3")
+                        return image_bytes
+            
+            # If we got here, something went wrong
+            error_text = response.text[:500] if response.text else 'No error details'
+            raise Exception(f"Vertex AI returned {response.status_code}: {error_text}")
+                
+        except Exception as e:
+            print(f"❌ Imagen generation error: {e}")
+            print(f"   Falling back to styled gradient placeholder")
+            # Fallback: Create professional gradient
+            img = Image.new('RGB', (1200, 675), (15, 20, 30))
         draw = ImageDraw.Draw(img)
         
         # Multi-layer gradient for depth
