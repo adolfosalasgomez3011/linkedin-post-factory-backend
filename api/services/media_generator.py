@@ -396,6 +396,51 @@ class MediaGenerator:
         c = canvas.Canvas(buffer, pagesize=letter)
         width, height = letter
         
+        # Generate cover page
+        c.setFillColorRGB(*color_scheme["bg"])
+        c.rect(0, 0, width, height, fill=1)
+        
+        # Cover title (wrapped and centered)
+        c.setFillColorRGB(*color_scheme["accent"])
+        c.setFont("Helvetica-Bold", 48)
+        
+        # Wrap title to fit page width
+        max_width = width - 100
+        title_lines = self._wrap_title(title, "Helvetica-Bold", 48, max_width, c)
+        
+        y_pos = height - 150
+        for line in title_lines:
+            line_width = c.stringWidth(line, "Helvetica-Bold", 48)
+            x_pos = (width - line_width) / 2
+            c.drawString(x_pos, y_pos, line)
+            y_pos -= 60
+        
+        # Generate cover image using Gemini
+        try:
+            cover_prompt = f"Professional, modern, photorealistic image representing: {title}"
+            cover_img_bytes = self.generate_realistic_image(cover_prompt)
+            cover_img = Image.open(io.BytesIO(cover_img_bytes))
+            
+            # Size for cover (50% of page)
+            cover_height = height * 0.4
+            cover_width = width * 0.8
+            cover_img.thumbnail((int(cover_width), int(cover_height)), Image.Resampling.LANCZOS)
+            
+            cover_buffer = io.BytesIO()
+            cover_img.save(cover_buffer, format='PNG')
+            cover_buffer.seek(0)
+            
+            img_x = (width - cover_img.width) / 2
+            img_y = (height - y_pos - cover_img.height) / 2 + 50
+            
+            c.drawImage(ImageReader(cover_buffer), img_x, img_y,
+                       width=cover_img.width, height=cover_img.height, mask='auto')
+        except Exception as e:
+            print(f"Cover image generation failed: {e}")
+        
+        c.showPage()
+        
+        # Generate content slides
         for idx, slide in enumerate(slides):
             print(f"DEBUG: Processing slide {idx+1}")
             
@@ -408,20 +453,28 @@ class MediaGenerator:
             c.setFont("Helvetica", 12)
             c.drawString(width - 60, 30, f"{idx + 1}/{len(slides)}")
             
-            # Title (centered)
-            slide_title = slide.get('title', f'Slide {idx + 1}')
+            # Title (wrapped and centered)
+            slide_title = slide.get('title', f'Key Point {idx + 1}')
             c.setFillColorRGB(*color_scheme["accent"])
             c.setFont("Helvetica-Bold", 28)
             
-            title_width = c.stringWidth(str(slide_title), "Helvetica-Bold", 28)
-            title_x = (width - title_width) / 2
-            c.drawString(title_x, height - 60, str(slide_title))
+            # Wrap title to fit page
+            max_title_width = width - 80
+            title_lines = self._wrap_title(slide_title, "Helvetica-Bold", 28, max_title_width, c)
+            
+            title_y = height - 50
+            for title_line in title_lines:
+                line_width = c.stringWidth(title_line, "Helvetica-Bold", 28)
+                title_x = (width - line_width) / 2
+                c.drawString(title_x, title_y, title_line)
+                title_y -= 35
             
             # Generate and insert AI image (40% of page height, centered)
             try:
-                # Create image prompt from slide title and content
-                image_prompt = f"{slide_title}"
-                img_bytes = self.generate_slide_image(image_prompt, style)
+                # Create detailed image prompt from slide content
+                content_preview = slide.get('content_en', '')[:200]
+                image_prompt = f"Photorealistic, professional image representing: {slide_title}. Context: {content_preview}"
+                img_bytes = self.generate_realistic_image(image_prompt)
                 
                 img = Image.open(io.BytesIO(img_bytes))
                 
@@ -528,6 +581,26 @@ class MediaGenerator:
         
         return bullets[:10]  # Max 10 bullets per slide
     
+    def _wrap_title(self, text: str, font_name: str, font_size: int, max_width: float, canvas_obj) -> List[str]:
+        """Wrap title text to fit within max width"""
+        words = text.split()
+        lines = []
+        current_line = []
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            if canvas_obj.stringWidth(test_line, font_name, font_size) <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines if lines else [text]
+    
     def _wrap_text(self, text: str, max_chars_per_line: int) -> List[str]:
         """Helper to wrap text into lines"""
         lines = []
@@ -554,61 +627,47 @@ class MediaGenerator:
         
         return lines
     
-    def generate_slide_image(self, prompt: str, style: str) -> bytes:
-        """Generate AI image for slide using Gemini (placeholder for now)"""
+    def generate_realistic_image(self, prompt: str) -> bytes:
+        """Generate photorealistic image using Gemini Imagen 3"""
         try:
-            # Note: Gemini doesn't generate images yet
-            # For production, integrate DALL-E or Stable Diffusion
-            # For now, create a styled placeholder
+            google_key = os.getenv('GOOGLE_API_KEY')
+            if not google_key:
+                raise Exception("GOOGLE_API_KEY not configured")
             
-            img = Image.new('RGB', (800, 400), self._get_bg_color(style))
+            genai.configure(api_key=google_key)
+            
+            # Use Imagen 3 for photorealistic image generation
+            imagen_model = genai.ImageGenerationModel('imagen-3.0-generate-001')
+            
+            response = imagen_model.generate_images(
+                prompt=prompt,
+                number_of_images=1,
+                aspect_ratio="16:9",
+                safety_filter_level="block_some",
+                person_generation="allow_adult"
+            )
+            
+            if response.images:
+                # Get image bytes from response
+                image_bytes = response.images[0]._image_bytes
+                return image_bytes
+            else:
+                raise Exception("No image generated")
+                
+        except Exception as e:
+            print(f"Gemini image generation error: {e}, using fallback")
+            # Fallback: Create a professional gradient placeholder
+            img = Image.new('RGB', (800, 400), (30, 30, 40))
             draw = ImageDraw.Draw(img)
             
-            # Add gradient effect
+            # Subtle gradient
             for y in range(400):
                 factor = y / 400
-                base = self._get_bg_color(style)
-                accent = self._get_accent_color(style)
-                r = int(base[0] + (accent[0] - base[0]) * factor)
-                g = int(base[1] + (accent[1] - base[1]) * factor)
-                b = int(base[2] + (accent[2] - base[2]) * factor)
+                r = int(30 + 50 * factor)
+                g = int(30 + 80 * factor)
+                b = int(40 + 120 * factor)
                 draw.line([(0, y), (800, y)], fill=(r, g, b))
             
-            # Add prompt text
-            try:
-                font = ImageFont.truetype("arial.ttf", 32)
-            except:
-                font = ImageFont.load_default()
-            
-            # Wrap prompt text
-            words = prompt.split()
-            lines = []
-            current = []
-            for word in words:
-                current.append(word)
-                if len(' '.join(current)) > 40:
-                    current.pop()
-                    lines.append(' '.join(current))
-                    current = [word]
-            if current:
-                lines.append(' '.join(current))
-            
-            y = 150
-            for line in lines[:3]:
-                bbox = draw.textbbox((0, 0), line, font=font)
-                text_w = bbox[2] - bbox[0]
-                x = (800 - text_w) / 2
-                draw.text((x, y), line, fill=(255, 255, 255), font=font)
-                y += 50
-            
-            output = io.BytesIO()
-            img.save(output, format='PNG')
-            return output.getvalue()
-            
-        except Exception as e:
-            print(f"Slide image generation error: {e}")
-            # Return simple colored rectangle
-            img = Image.new('RGB', (800, 400), (50, 50, 50))
             output = io.BytesIO()
             img.save(output, format='PNG')
             return output.getvalue()
