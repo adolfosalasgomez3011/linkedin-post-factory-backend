@@ -400,24 +400,28 @@ class MediaGenerator:
         c.setFillColorRGB(*color_scheme["bg"])
         c.rect(0, 0, width, height, fill=1)
         
-        # Cover title (wrapped and centered)
+        # Cover title - create short summary (6-8 words)
+        cover_title = self._create_summary_title(title, max_words=8)
+        
         c.setFillColorRGB(*color_scheme["accent"])
-        c.setFont("Helvetica-Bold", 32)
+        c.setFont("Helvetica-Bold", 36)
         
         # Wrap title to fit page width
         max_width = width - 100
-        title_lines = self._wrap_title(title, "Helvetica-Bold", 32, max_width, c)
+        title_lines = self._wrap_title(cover_title, "Helvetica-Bold", 36, max_width, c)
         
-        y_pos = height - 100
+        y_pos = height - 120
         for line in title_lines:
-            line_width = c.stringWidth(line, "Helvetica-Bold", 32)
+            line_width = c.stringWidth(line, "Helvetica-Bold", 36)
             x_pos = (width - line_width) / 2
             c.drawString(x_pos, y_pos, line)
-            y_pos -= 40
+            y_pos -= 45
         
         # Generate cover image using Gemini
         try:
-            cover_prompt = f"Professional, modern, photorealistic image representing: {title}"
+            # Include style in prompt for consistent imagery
+            style_desc = f"{style} style" if style != 'professional' else 'professional'
+            cover_prompt = f"Photorealistic, {style_desc}, modern image representing: {cover_title}"
             cover_img_bytes = self.generate_realistic_image(cover_prompt)
             cover_img = Image.open(io.BytesIO(cover_img_bytes))
             
@@ -455,34 +459,50 @@ class MediaGenerator:
             
             # Title (wrapped and centered) - Create short compelling title
             slide_title = slide.get('title', '')
-            if not slide_title or slide_title.startswith('Key Point'):
-                # Extract first 3-5 words from content as catchy title
-                content_preview = slide.get('content_en', slide.get('content', ''))
-                words = content_preview.split()[:5]  # Take first 5 words max
-                slide_title = ' '.join(words).strip('.,!?;:') if words else f'Point {idx + 1}'
+            content_en = slide.get('content_en', '')
+            content_es = slide.get('content_es', '')
             
+            # Check if bilingual
+            is_bilingual = bool(content_en and content_es)
+            
+            if not slide_title or slide_title.startswith('Key Point'):
+                # Create concise title from content
+                content_preview = content_en or slide.get('content', '')
+                slide_title = self._create_summary_title(content_preview, max_words=6)
+            else:
+                # Ensure existing title is concise
+                slide_title = self._create_summary_title(slide_title, max_words=6)
+            
+            # English title
             c.setFillColorRGB(*color_scheme["accent"])
             c.setFont("Helvetica-Bold", 24)
             
-            # Wrap title to fit page
-            max_title_width = width - 80
-            title_lines = self._wrap_title(slide_title, "Helvetica-Bold", 24, max_title_width, c)
-            
             title_y = height - 40
-            for title_line in title_lines:
-                line_width = c.stringWidth(title_line, "Helvetica-Bold", 24)
-                title_x = (width - line_width) / 2
-                c.drawString(title_x, title_y, title_line)
-                title_y -= 30
+            title_width = c.stringWidth(slide_title, "Helvetica-Bold", 24)
+            title_x = (width - title_width) / 2
+            c.drawString(title_x, title_y, slide_title)
+            title_y -= 32
+            
+            # Spanish translation if bilingual
+            if is_bilingual and content_es:
+                # Create Spanish title from Spanish content
+                slide_title_es = self._create_summary_title(content_es, max_words=6)
+                c.setFillColorRGB(*color_scheme["secondary"])
+                c.setFont("Helvetica", 16)
+                title_width_es = c.stringWidth(slide_title_es, "Helvetica", 16)
+                title_x_es = (width - title_width_es) / 2
+                c.drawString(title_x_es, title_y, slide_title_es)
+                title_y -= 28
             
             # Calculate image start position after title
-            image_start_y = title_y - 20
+            image_start_y = title_y - 15
             
             # Generate and insert AI image (40% of page height, centered)
             try:
-                # Create detailed image prompt from slide content
-                content_preview = slide.get('content_en', '')[:200]
-                image_prompt = f"Photorealistic, professional image representing: {slide_title}. Context: {content_preview}"
+                # Create detailed image prompt matching carousel style
+                content_preview = (content_en or slide.get('content', ''))[:150]
+                style_desc = f"{style} aesthetic" if style != 'professional' else 'professional'
+                image_prompt = f"Photorealistic, {style_desc}, high-quality image about: {slide_title}. {content_preview[:100]}"
                 img_bytes = self.generate_realistic_image(image_prompt)
                 
                 img = Image.open(io.BytesIO(img_bytes))
@@ -578,6 +598,24 @@ class MediaGenerator:
         
         c.save()
         return buffer.getvalue()
+    
+    def _create_summary_title(self, text: str, max_words: int = 6) -> str:
+        """Create a short, compelling title from longer text (6-8 words max)"""
+        if not text or not text.strip():
+            return "Key Insight"
+        
+        # Remove common prefixes and clean text
+        cleaned = text.strip()
+        prefixes = ['Breakthrough:', 'Introduction:', 'Key Point:', 'Insight:']
+        for prefix in prefixes:
+            if cleaned.startswith(prefix):
+                cleaned = cleaned[len(prefix):].strip()
+        
+        # Take first sentence or phrase
+        first_sentence = cleaned.split('.')[0].split('?')[0].split('!')[0]
+        words = first_sentence.split()[:max_words]
+        
+        return ' '.join(words).strip('.,!?;:')
     
     def _format_as_bullets(self, text: str) -> List[str]:
         """Convert text into bullet points"""
