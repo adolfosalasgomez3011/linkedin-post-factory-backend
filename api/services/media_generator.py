@@ -628,49 +628,79 @@ class MediaGenerator:
         return lines
     
     def generate_realistic_image(self, prompt: str) -> bytes:
-        """Generate photorealistic image using Gemini Imagen 3"""
+        """Generate professional gradient image (Vertex AI requires OAuth2 setup)"""
+        # Note: Real Imagen 3 generation requires Google Cloud OAuth2
+        # For now, creating professional styled placeholder
+        print(f"📸 Creating styled image for: {prompt[:60]}...")
+        
+        # Create high-quality 16:9 image
+        img = Image.new('RGB', (1200, 675), (15, 20, 30))
+        draw = ImageDraw.Draw(img)
+        
+        # Multi-layer gradient for depth
+        for y in range(675):
+            factor = y / 675
+            # Deep blue to cyan gradient
+            r = int(15 + 45 * factor)
+            g = int(20 + 120 * factor)
+            b = int(30 + 180 * factor)
+            draw.line([(0, y), (1200, y)], fill=(r, g, b))
+        
+        # Add geometric overlay for visual interest
+        overlay = Image.new('RGBA', (1200, 675), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        
+        # Diagonal lines pattern
+        for i in range(0, 1400, 100):
+            overlay_draw.line([(i-200, 0), (i, 675)], fill=(255, 255, 255, 8), width=2)
+        
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        draw = ImageDraw.Draw(img)
+        
+        # Add centered text with prompt
         try:
-            google_key = os.getenv('GOOGLE_API_KEY')
-            if not google_key:
-                raise Exception("GOOGLE_API_KEY not configured")
-            
-            genai.configure(api_key=google_key)
-            
-            # Use Imagen 3 for photorealistic image generation
-            imagen_model = genai.ImageGenerationModel('imagen-3.0-generate-001')
-            
-            response = imagen_model.generate_images(
-                prompt=prompt,
-                number_of_images=1,
-                aspect_ratio="16:9",
-                safety_filter_level="block_some",
-                person_generation="allow_adult"
-            )
-            
-            if response.images:
-                # Get image bytes from response
-                image_bytes = response.images[0]._image_bytes
-                return image_bytes
-            else:
-                raise Exception("No image generated")
-                
-        except Exception as e:
-            print(f"Gemini image generation error: {e}, using fallback")
-            # Fallback: Create a professional gradient placeholder
-            img = Image.new('RGB', (800, 400), (30, 30, 40))
-            draw = ImageDraw.Draw(img)
-            
-            # Subtle gradient
-            for y in range(400):
-                factor = y / 400
-                r = int(30 + 50 * factor)
-                g = int(30 + 80 * factor)
-                b = int(40 + 120 * factor)
-                draw.line([(0, y), (800, y)], fill=(r, g, b))
-            
-            output = io.BytesIO()
-            img.save(output, format='PNG')
-            return output.getvalue()
+            title_font = ImageFont.truetype("arial.ttf", 52)
+            subtitle_font = ImageFont.truetype("arial.ttf", 28)
+        except:
+            title_font = ImageFont.load_default()
+            subtitle_font = ImageFont.load_default()
+        
+        # Wrap prompt text
+        words = prompt.split()
+        lines = []
+        current = []
+        for word in words:
+            current.append(word)
+            test_line = ' '.join(current)
+            if len(test_line) > 35:
+                current.pop()
+                if current:
+                    lines.append(' '.join(current))
+                current = [word]
+        if current:
+            lines.append(' '.join(current))
+        
+        # Draw text with shadow
+        y_offset = 220
+        for line in lines[:3]:
+            bbox = draw.textbbox((0, 0), line, font=title_font)
+            text_w = bbox[2] - bbox[0]
+            x = (1200 - text_w) / 2
+            # Shadow
+            draw.text((x+3, y_offset+3), line, fill=(0, 0, 0, 180), font=title_font)
+            # Main text
+            draw.text((x, y_offset), line, fill=(255, 255, 255), font=title_font)
+            y_offset += 70
+        
+        # Watermark
+        watermark = \"AI Generated Visual\"
+        wm_bbox = draw.textbbox((0, 0), watermark, font=subtitle_font)
+        wm_w = wm_bbox[2] - wm_bbox[0]
+        draw.text((1200 - wm_w - 30, 635), watermark, fill=(255, 255, 255, 100), font=subtitle_font)
+        
+        output = io.BytesIO()
+        img.save(output, format='PNG', quality=95)
+        return output.getvalue()
     
     def _get_bg_color(self, style: str) -> Tuple[int, int, int]:
         """Get background color for style"""
