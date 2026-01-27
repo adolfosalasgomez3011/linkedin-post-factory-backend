@@ -420,8 +420,15 @@ class MediaGenerator:
         # Generate cover image using Gemini
         try:
             # Include style in prompt for consistent imagery
-            style_desc = f"{style} style" if style != 'professional' else 'professional'
-            cover_prompt = f"Photorealistic, {style_desc}, modern image representing: {cover_title}"
+            style_descriptors = {
+                'professional': 'clean, modern, professional business',
+                'relaxed': 'warm, natural, organic',
+                'corporate': 'sleek, corporate, executive',
+                'creative': 'vibrant, artistic, creative',
+                'minimal': 'minimalist, simple, clean'
+            }
+            style_desc = style_descriptors.get(style, 'professional')
+            cover_prompt = f"Photorealistic, {style_desc} image representing: {cover_title}. High quality, 16:9 aspect ratio."
             cover_img_bytes = self.generate_realistic_image(cover_prompt)
             cover_img = Image.open(io.BytesIO(cover_img_bytes))
             
@@ -468,31 +475,68 @@ class MediaGenerator:
             if not slide_title or slide_title.startswith('Key Point'):
                 # Create concise title from content
                 content_preview = content_en or slide.get('content', '')
-                slide_title = self._create_summary_title(content_preview, max_words=6)
+                slide_title = self._create_summary_title(content_preview, max_words=5)
             else:
-                # Ensure existing title is concise
-                slide_title = self._create_summary_title(slide_title, max_words=6)
+                # Ensure existing title is concise (max 5 words to prevent overflow)
+                slide_title = self._create_summary_title(slide_title, max_words=5)
             
-            # English title
+            # English title with wrapping to prevent overflow
             c.setFillColorRGB(*color_scheme["accent"])
-            c.setFont("Helvetica-Bold", 24)
+            c.setFont("Helvetica-Bold", 22)
             
             title_y = height - 40
-            title_width = c.stringWidth(slide_title, "Helvetica-Bold", 24)
-            title_x = (width - title_width) / 2
-            c.drawString(title_x, title_y, slide_title)
-            title_y -= 32
             
-            # Spanish translation if bilingual
-            if is_bilingual and content_es:
-                # Create Spanish title from Spanish content
-                slide_title_es = self._create_summary_title(content_es, max_words=6)
+            # Wrap title if too long (max width 500px)
+            max_title_width = 500
+            if c.stringWidth(slide_title, "Helvetica-Bold", 22) > max_title_width:
+                words = slide_title.split()
+                line1 = ' '.join(words[:3])
+                line2 = ' '.join(words[3:6]) if len(words) > 3 else ''
+                
+                title_width = c.stringWidth(line1, "Helvetica-Bold", 22)
+                title_x = (width - title_width) / 2
+                c.drawString(title_x, title_y, line1)
+                title_y -= 28
+                
+                if line2:
+                    title_width = c.stringWidth(line2, "Helvetica-Bold", 22)
+                    title_x = (width - title_width) / 2
+                    c.drawString(title_x, title_y, line2)
+                    title_y -= 28
+            else:
+                title_width = c.stringWidth(slide_title, "Helvetica-Bold", 22)
+                title_x = (width - title_width) / 2
+                c.drawString(title_x, title_y, slide_title)
+                title_y -= 30
+            
+            # Spanish translation if bilingual (translate the ENGLISH title, not content)
+            if is_bilingual:
+                # Simple translation keywords for common words (fallback to similar structure)
+                translation_map = {
+                    'the': 'el/la', 'and': 'y', 'of': 'de', 'in': 'en', 'to': 'a',
+                    'era': 'era', 'quantum': 'cuántica', 'breakthrough': 'avance',
+                    'AI': 'IA', 'impact': 'impacto', 'driven': 'impulsado',
+                    'platforms': 'plataformas', 'see': 'ver', 'growth': 'crecimiento'
+                }
+                
+                # Create Spanish version (simple word-by-word attempt, or extract from content_es)
+                slide_title_es_words = []
+                for word in slide_title.lower().split():
+                    clean_word = word.strip('.,!?;:')
+                    slide_title_es_words.append(translation_map.get(clean_word, word))
+                
+                slide_title_es = ' '.join(slide_title_es_words).title()
+                
+                # If translation looks too similar to English, extract from Spanish content instead
+                if slide_title_es.lower() == slide_title.lower() and content_es:
+                    slide_title_es = self._create_summary_title(content_es, max_words=5)
+                
                 c.setFillColorRGB(*color_scheme["secondary"])
-                c.setFont("Helvetica", 16)
-                title_width_es = c.stringWidth(slide_title_es, "Helvetica", 16)
+                c.setFont("Helvetica-Oblique", 14)
+                title_width_es = c.stringWidth(slide_title_es, "Helvetica-Oblique", 14)
                 title_x_es = (width - title_width_es) / 2
                 c.drawString(title_x_es, title_y, slide_title_es)
-                title_y -= 28
+                title_y -= 25
             
             # Calculate image start position after title
             image_start_y = title_y - 15
@@ -500,9 +544,16 @@ class MediaGenerator:
             # Generate and insert AI image (40% of page height, centered)
             try:
                 # Create detailed image prompt matching carousel style
-                content_preview = (content_en or slide.get('content', ''))[:150]
-                style_desc = f"{style} aesthetic" if style != 'professional' else 'professional'
-                image_prompt = f"Photorealistic, {style_desc}, high-quality image about: {slide_title}. {content_preview[:100]}"
+                style_descriptors = {
+                    'professional': 'clean, modern, professional business aesthetic',
+                    'relaxed': 'warm, natural, organic feeling',
+                    'corporate': 'sleek, corporate, executive style',
+                    'creative': 'vibrant, artistic, bold creative',
+                    'minimal': 'minimalist, simple, clean design'
+                }
+                style_desc = style_descriptors.get(style, 'professional')
+                content_preview = (content_en or slide.get('content', ''))[:100]
+                image_prompt = f"Photorealistic, {style_desc}, high-quality image about: {slide_title}. Context: {content_preview}. 16:9 aspect ratio."
                 img_bytes = self.generate_realistic_image(image_prompt)
                 
                 img = Image.open(io.BytesIO(img_bytes))
