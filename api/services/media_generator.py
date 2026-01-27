@@ -699,13 +699,36 @@ class MediaGenerator:
                 genai.configure(api_key=api_key)
             
             model = genai.GenerativeModel('gemini-2.0-flash')
-            prompt = f"Translate this to Spanish (maintain professional tone, keep it concise): {english_text}"
+            prompt = f"""Translate ONLY the following English text to Spanish. 
+Return ONLY the Spanish translation, nothing else - no explanations, no options, no extra text.
+Keep it professional and concise.
+
+English: {english_text}
+
+Spanish:"""
             
             response = model.generate_content(prompt)
             spanish_text = response.text.strip()
             
-            # Clean up any markdown or extra formatting
+            # Clean up any markdown, labels, or extra formatting
             spanish_text = spanish_text.replace('**', '').replace('*', '').strip()
+            
+            # Remove common prefixes that Gemini might add
+            prefixes_to_remove = [
+                'Spanish:', 'Translation:', 'Spanish translation:', 
+                'Translated:', 'Spanish Options', 'most common',
+                'direct first', '(', ')'
+            ]
+            for prefix in prefixes_to_remove:
+                if spanish_text.startswith(prefix):
+                    spanish_text = spanish_text[len(prefix):].strip()
+                spanish_text = spanish_text.replace(prefix + ':', '').strip()
+            
+            # Remove any text after a colon (usually explanations)
+            if ':' in spanish_text and spanish_text.index(':') < 30:
+                parts = spanish_text.split(':', 1)
+                if len(parts) > 1:
+                    spanish_text = parts[1].strip()
             
             return spanish_text
         except Exception as e:
