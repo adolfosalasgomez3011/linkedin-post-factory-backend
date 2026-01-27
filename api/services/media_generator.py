@@ -631,8 +631,11 @@ class MediaGenerator:
         """Generate photorealistic image using Vertex AI Imagen 3"""
         try:
             import requests
+            import json
+            import tempfile
             from google.auth.transport.requests import Request
             from google.auth import default
+            from google.oauth2.credentials import Credentials
             
             # Vertex AI configuration (same as MCP server)
             PROJECT_ID = 'gen-lang-client-0439499588'
@@ -642,10 +645,30 @@ class MediaGenerator:
             print(f"🎨 Generating image via Vertex AI Imagen 3...")
             print(f"   Prompt: {prompt[:80]}...")
             
-            # Get credentials using Google Auth (same as MCP server)
-            credentials, project = default(
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
-            )
+            # Check if credentials are in environment variable (from Render Secret File)
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            
+            if creds_path and os.path.exists(creds_path):
+                print(f"   Using credentials from: {creds_path}")
+                # Load credentials from file
+                with open(creds_path, 'r') as f:
+                    creds_data = json.load(f)
+                
+                # Create credentials object
+                credentials = Credentials(
+                    token=None,
+                    refresh_token=creds_data.get('refresh_token'),
+                    token_uri='https://oauth2.googleapis.com/token',
+                    client_id=creds_data.get('client_id'),
+                    client_secret=creds_data.get('client_secret'),
+                    scopes=['https://www.googleapis.com/auth/cloud-platform']
+                )
+            else:
+                print(f"   Using default credentials (ADC)")
+                # Get credentials using Google Auth default
+                credentials, project = default(
+                    scopes=['https://www.googleapis.com/auth/cloud-platform']
+                )
             
             # Get access token
             auth_req = Request()
@@ -654,6 +677,8 @@ class MediaGenerator:
             
             if not access_token:
                 raise Exception("Failed to get OAuth2 access token")
+            
+            print(f"   ✅ Access token obtained")
             
             # Build the Vertex AI endpoint URL
             url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/{MODEL_NAME}:predict"
