@@ -453,13 +453,13 @@ class MediaGenerator:
             c.setFont("Helvetica", 12)
             c.drawString(width - 60, 30, f"{idx + 1}/{len(slides)}")
             
-            # Title (wrapped and centered) - Use content for meaningful title
+            # Title (wrapped and centered) - Create short compelling title
             slide_title = slide.get('title', '')
             if not slide_title or slide_title.startswith('Key Point'):
-                # Extract first sentence from content as title
+                # Extract first 3-5 words from content as catchy title
                 content_preview = slide.get('content_en', slide.get('content', ''))
-                first_sentence = content_preview.split('.')[0].strip()[:60]
-                slide_title = first_sentence if first_sentence else f'Point {idx + 1}'
+                words = content_preview.split()[:5]  # Take first 5 words max
+                slide_title = ' '.join(words).strip('.,!?;:') if words else f'Point {idx + 1}'
             
             c.setFillColorRGB(*color_scheme["accent"])
             c.setFont("Helvetica-Bold", 24)
