@@ -422,16 +422,14 @@ class MediaGenerator:
         
         # Add Spanish translation if bilingual
         if is_bilingual_carousel:
-            # Extract Spanish title from first slide's Spanish content
-            first_slide_es = slides[0].get('content_es', '')
-            if first_slide_es:
-                cover_title_es = self._create_summary_title(first_slide_es, max_words=8)
-                c.setFillColorRGB(*color_scheme["secondary"])
-                c.setFont("Helvetica-Oblique", 20)
-                title_width_es = c.stringWidth(cover_title_es, "Helvetica-Oblique", 20)
-                x_pos_es = (width - title_width_es) / 2
-                c.drawString(x_pos_es, y_pos, cover_title_es)
-                y_pos -= 35
+            # Translate the ENGLISH cover title
+            cover_title_es = self._translate_to_spanish(cover_title)
+            c.setFillColorRGB(*color_scheme["secondary"])
+            c.setFont("Helvetica-Oblique", 20)
+            title_width_es = c.stringWidth(cover_title_es, "Helvetica-Oblique", 20)
+            x_pos_es = (width - title_width_es) / 2
+            c.drawString(x_pos_es, y_pos, cover_title_es)
+            y_pos -= 35
         
         # Generate cover image using Gemini
         try:
@@ -525,15 +523,10 @@ class MediaGenerator:
                 c.drawString(title_x, title_y, slide_title)
                 title_y -= 30
             
-            # Spanish translation if bilingual (extract from Spanish content directly)
+            # Spanish translation if bilingual (TRANSLATE the English title)
             if is_bilingual:
-                # Extract Spanish title directly from Spanish content (same words as English title)
-                if content_es:
-                    # Create Spanish title from Spanish content using same word count
-                    slide_title_es = self._create_summary_title(content_es, max_words=5)
-                else:
-                    # Fallback: use English title
-                    slide_title_es = slide_title
+                # Translate the English title to Spanish
+                slide_title_es = self._translate_to_spanish(slide_title)
                 
                 c.setFillColorRGB(*color_scheme["secondary"])
                 c.setFont("Helvetica-Oblique", 14)
@@ -608,20 +601,28 @@ class MediaGenerator:
                 c.setFillColorRGB(*color_scheme["text"])
                 c.setFont("Helvetica", 12)
                 
-                # Process English bullets (left)
+                # Process English bullets (left) - ENSURE PERIODS
                 bullets_en = self._format_as_bullets(content_en)
                 y_pos = content_start_y - 10
                 for bullet in bullets_en[:8]:
+                    # Ensure period at end
+                    if not bullet.endswith(('.', '!', '?')):
+                        bullet += '.'
+                    
                     c.drawString(50, y_pos, "•")
                     wrapped = self._wrap_text(bullet, 28)
                     for line in wrapped[:2]:
                         c.drawString(65, y_pos, line.strip())
                         y_pos -= 18
                 
-                # Process Spanish bullets (right)
+                # Process Spanish bullets (right) - ENSURE PERIODS
                 bullets_es = self._format_as_bullets(content_es)
                 y_pos = content_start_y - 10
                 for bullet in bullets_es[:8]:
+                    # Ensure period at end
+                    if not bullet.endswith(('.', '!', '?')):
+                        bullet += '.'
+                    
                     c.drawString(divider_x + 25, y_pos, "•")
                     wrapped = self._wrap_text(bullet, 28)
                     for line in wrapped[:2]:
@@ -653,6 +654,50 @@ class MediaGenerator:
         
         c.save()
         return buffer.getvalue()
+    
+    def _translate_to_spanish(self, english_text: str) -> str:
+        """Simple Spanish translation for common carousel terms"""
+        # Common translations for carousel titles
+        translations = {
+            'ai-driven': 'impulsado por ia',
+            'personalized': 'personalizado',
+            'education': 'educación',
+            'platforms': 'plataformas',
+            'see': 'ver',
+            'user': 'usuario',
+            'growth': 'crecimiento',
+            'the': 'el/la',
+            'quantum': 'cuántico',
+            'breakthrough': 'avance',
+            'impact': 'impacto',
+            'era': 'era',
+            'driven': 'impulsado',
+            'technology': 'tecnología',
+            'digital': 'digital',
+            'transformation': 'transformación',
+            'innovation': 'innovación',
+            'future': 'futuro',
+            'business': 'negocio',
+            'data': 'datos'
+        }
+        
+        words = english_text.lower().split()
+        spanish_words = []
+        
+        for word in words:
+            clean = word.strip('.,!?;:')
+            # Try to find translation
+            found = False
+            for en, es in translations.items():
+                if en in clean.lower():
+                    spanish_words.append(es)
+                    found = True
+                    break
+            if not found:
+                spanish_words.append(word)  # Keep original if no translation
+        
+        result = ' '.join(spanish_words)
+        return result.title()
     
     def _create_summary_title(self, text: str, max_words: int = 6) -> str:
         """Create a short, compelling title from longer text (6-8 words max)"""
