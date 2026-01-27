@@ -2,6 +2,11 @@
 .env
 .env.local
 
+# Google Cloud credentials
+gcp-credentials.json
+*-credentials.json
+application_default_credentials.json
+
 # Python
 __pycache__/
 *.py[cod]

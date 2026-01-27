@@ -719,7 +719,13 @@ class MediaGenerator:
             raise Exception(f"Vertex AI returned {response.status_code}: {error_text}")
                 
         except Exception as e:
-            print(f"❌ Imagen generation error: {e}")
+            print(f"❌ IMAGEN GENERATION FAILED ❌")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {str(e)}")
+            import traceback
+            print(f"   Traceback:")
+            traceback.print_exc()
+            print(f"   GOOGLE_APPLICATION_CREDENTIALS env var: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS')}")
             print(f"   Falling back to styled gradient placeholder")
             # Fallback: Create professional gradient
             img = Image.new('RGB', (1200, 675), (15, 20, 30))
