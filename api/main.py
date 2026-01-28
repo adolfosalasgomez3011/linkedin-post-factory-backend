@@ -765,9 +765,17 @@ async def generate_carousel(request: CarouselRequest):
             print(f"✗ Path generation failed: {e}")
             import traceback
             traceback.print_exc()
+            # Set defaults if path generation failed
+            month = "Jan"
+            year = "26"
+            content_pillar = "General"
+            post_type = "Standard"
+            format_type = "Text"
+            topic = "Post"
+            correlative = 1
         
         # Generate filename for download
-        filename = f"{month}_{year}_{content_pillar_clean}_{post_type_clean}_{format_clean}_{topic_clean}_{correlative:02d}.pdf"
+        filename = f"{month}_{year}_{content_pillar}_{post_type}_{format_type}_{topic}_{correlative:02d}.pdf"
         print(f"DEBUG: Download filename: {filename}")
         
         # Return PDF as downloadable file
