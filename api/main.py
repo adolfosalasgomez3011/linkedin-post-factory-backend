@@ -3,6 +3,7 @@ FastAPI Backend for LinkedIn Post Factory
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -699,6 +700,16 @@ async def generate_carousel(request: CarouselRequest):
     if not MEDIA_ENABLED:
         raise HTTPException(status_code=501, detail="Media generation not available")
     try:
+        # DEBUG: Print what we received
+        print("\n========== CAROUSEL REQUEST DEBUG ==========")
+        print(f"Title: {request.title}")
+        print(f"Content Pillar: {request.content_pillar}")
+        print(f"Post Type: {request.post_type}")
+        print(f"Format: {request.format}")
+        print(f"Topic: {request.topic}")
+        print(f"Style: {request.style}")
+        print("============================================\n")
+        
         pdf_bytes = media_generator.generate_carousel_pdf(
             slides=request.slides,
             title=request.title,
@@ -715,6 +726,7 @@ async def generate_carousel(request: CarouselRequest):
             # Create folder if doesn't exist
             base_folder = r"C:\Users\USER\OneDrive\LinkedIn_PersonalBrand\LinkedInAIPosts"
             os.makedirs(base_folder, exist_ok=True)
+            print(f"DEBUG: Base folder: {base_folder}")
             
             # Get current date
             now = datetime.now()
@@ -727,8 +739,12 @@ async def generate_carousel(request: CarouselRequest):
             format_type = re.sub(r'[^\w\s-]', '', request.format or "Text").replace(" ", "")
             topic = re.sub(r'[^\w\s-]', '', request.topic or request.title or "Post").replace(" ", "")[:30]
             
+            print(f"DEBUG: Cleaned - pillar={content_pillar}, type={post_type}, format={format_type}, topic={topic}")
+            
             # Find next correlative number
             base_name = f"{month}_{year}_{content_pillar}_{post_type}_{format_type}_{topic}"
+            print(f"DEBUG: Base name: {base_name}")
+            
             correlative = 1
             while True:
                 filename = f"{base_name}_{correlative:02d}.pdf"
@@ -737,31 +753,32 @@ async def generate_carousel(request: CarouselRequest):
                     break
                 correlative += 1
             
+            print(f"DEBUG: Final filepath: {filepath}")
+            
             # Save file
             with open(filepath, 'wb') as f:
                 f.write(pdf_bytes)
             
             local_path = filepath
-            print(f"Carousel saved locally: {filepath}")
+            print(f"✓ Carousel would save to: {filepath}")
         except Exception as e:
-            print(f"Local save failed: {e}")
+            print(f"✗ Path generation failed: {e}")
+            import traceback
+            traceback.print_exc()
         
-        url = None
-        if request.save_to_storage and storage_service and request.post_id:
-            try:
-                url = storage_service.upload_media(
-                    pdf_bytes,
-                    request.post_id,
-                    "carousel",
-                    "pdf"
-                )
-            except Exception as e:
-                print(f"Storage upload failed: {e}")
-
-        if not url:
-            url = to_data_uri(pdf_bytes, "application/pdf")
-            
-        return {"success": True, "url": url, "type": "carousel", "local_path": local_path}
+        # Generate filename for download
+        filename = f"{month}_{year}_{content_pillar_clean}_{post_type_clean}_{format_clean}_{topic_clean}_{correlative:02d}.pdf"
+        print(f"DEBUG: Download filename: {filename}")
+        
+        # Return PDF as downloadable file
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/pdf"
+            }
+        )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating carousel: {str(e)}")
