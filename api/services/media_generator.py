@@ -513,7 +513,7 @@ class MediaGenerator:
             c.setFont("Helvetica", 12)
             c.drawString(width - 60, 30, f"{idx + 1}/{len(slides)}")
             
-            # Title (wrapped and centered) - Create short compelling title
+            # Title (wrapped and centered) - Intelligently condense if needed
             slide_title = slide.get('title', '')
             content_en = slide.get('content_en', '')
             content_es = slide.get('content_es', '')
@@ -522,41 +522,47 @@ class MediaGenerator:
             is_bilingual = bool(content_en and content_es)
             
             if not slide_title or slide_title.startswith('Key Point'):
-                # Create concise title from content
+                # Create title from content (no arbitrary word limit)
                 content_preview = content_en or slide.get('content', '')
-                slide_title = self._create_summary_title(content_preview, max_words=5)
+                slide_title = self._create_summary_title(content_preview, max_chars=65)
             else:
-                # Ensure existing title is concise (max 5 words to prevent overflow)
-                slide_title = self._create_summary_title(slide_title, max_words=5)
+                # Condense existing title if too long (no word limit, use character limit)
+                slide_title = self._create_summary_title(slide_title, max_chars=65)
             
-            # English title with wrapping to prevent overflow
+            # English title with intelligent wrapping
             c.setFillColorRGB(*color_scheme["accent"])
-            c.setFont("Helvetica-Bold", 22)
+            c.setFont("Helvetica-Bold", 20)
             
             title_y = height - 40
+            max_title_width = 520
             
-            # Wrap title if too long (max width 500px)
-            max_title_width = 500
-            if c.stringWidth(slide_title, "Helvetica-Bold", 22) > max_title_width:
+            # Wrap title intelligently if needed
+            title_lines = []
+            if c.stringWidth(slide_title, "Helvetica-Bold", 20) > max_title_width:
+                # Split into lines that fit
                 words = slide_title.split()
-                line1 = ' '.join(words[:3])
-                line2 = ' '.join(words[3:6]) if len(words) > 3 else ''
+                current_line = []
                 
-                title_width = c.stringWidth(line1, "Helvetica-Bold", 22)
-                title_x = (width - title_width) / 2
-                c.drawString(title_x, title_y, line1)
-                title_y -= 28
+                for word in words:
+                    test_line = ' '.join(current_line + [word])
+                    if c.stringWidth(test_line, "Helvetica-Bold", 20) <= max_title_width:
+                        current_line.append(word)
+                    else:
+                        if current_line:
+                            title_lines.append(' '.join(current_line))
+                        current_line = [word]
                 
-                if line2:
-                    title_width = c.stringWidth(line2, "Helvetica-Bold", 22)
-                    title_x = (width - title_width) / 2
-                    c.drawString(title_x, title_y, line2)
-                    title_y -= 28
+                if current_line:
+                    title_lines.append(' '.join(current_line))
             else:
-                title_width = c.stringWidth(slide_title, "Helvetica-Bold", 22)
+                title_lines = [slide_title]
+            
+            # Draw title lines (max 2 lines)
+            for line in title_lines[:2]:
+                title_width = c.stringWidth(line, "Helvetica-Bold", 20)
                 title_x = (width - title_width) / 2
-                c.drawString(title_x, title_y, slide_title)
-                title_y -= 30
+                c.drawString(title_x, title_y, line)
+                title_y -= 26
             
             # Spanish translation if bilingual (TRANSLATE the English title)
             if is_bilingual:
@@ -735,23 +741,60 @@ Spanish:"""
             # Fallback to original text if translation fails
             return english_text
     
-    def _create_summary_title(self, text: str, max_words: int = 6) -> str:
-        """Create a short, compelling title from longer text (6-8 words max)"""
+    def _create_summary_title(self, text: str, max_chars: int = 60) -> str:
+        """Create a condensed, compelling title from longer text using Gemini"""
         if not text or not text.strip():
             return "Key Insight"
         
-        # Remove common prefixes and clean text
-        cleaned = text.strip()
-        prefixes = ['Breakthrough:', 'Introduction:', 'Key Point:', 'Insight:']
-        for prefix in prefixes:
-            if cleaned.startswith(prefix):
-                cleaned = cleaned[len(prefix):].strip()
+        # If already short enough, use as-is
+        if len(text.strip()) <= max_chars:
+            return text.strip()
         
-        # Take first sentence or phrase
-        first_sentence = cleaned.split('.')[0].split('?')[0].split('!')[0]
-        words = first_sentence.split()[:max_words]
-        
-        return ' '.join(words).strip('.,!?;:')
+        # Use Gemini to intelligently condense while keeping meaning
+        try:
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if api_key:
+                genai.configure(api_key=api_key)
+            
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            prompt = f"""Condense this text into a short, compelling title (max {max_chars} characters).
+Keep the core meaning but make it concise and punchy.
+Return ONLY the condensed title, nothing else.
+
+Text: {text}
+
+Condensed title:"""
+            
+            response = model.generate_content(prompt)
+            condensed = response.text.strip()
+            
+            # Clean up
+            condensed = condensed.replace('**', '').replace('*', '').strip()
+            for prefix in ['Title:', 'Condensed:', 'Condensed title:']:
+                if condensed.startswith(prefix):
+                    condensed = condensed[len(prefix):].strip()
+            
+            # If still too long, truncate intelligently
+            if len(condensed) > max_chars:
+                words = condensed.split()
+                result = []
+                length = 0
+                for word in words:
+                    if length + len(word) + 1 <= max_chars:
+                        result.append(word)
+                        length += len(word) + 1
+                    else:
+                        break
+                condensed = ' '.join(result)
+            
+            return condensed
+        except:
+            # Fallback: take first sentence/phrase
+            first_sentence = text.split('.')[0].split('?')[0].split('!')[0]
+            if len(first_sentence) > max_chars:
+                words = first_sentence.split()[:6]
+                return ' '.join(words)
+            return first_sentence
     
     def _format_as_bullets(self, text: str) -> List[str]:
         """Convert text into bullet points, ensuring each ends with period"""
