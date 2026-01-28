@@ -508,6 +508,8 @@ class CarouselRequest(BaseModel):
     post_id: Optional[str] = None
     save_to_storage: bool = True
     content_pillar: Optional[str] = None
+    post_type: Optional[str] = None
+    format: Optional[str] = None
     topic: Optional[str] = None
 
 class AIImageRequest(BaseModel):
@@ -721,10 +723,12 @@ async def generate_carousel(request: CarouselRequest):
             
             # Clean fields for filename
             content_pillar = re.sub(r'[^\w\s-]', '', request.content_pillar or "General").replace(" ", "")
+            post_type = re.sub(r'[^\w\s-]', '', request.post_type or "Standard").replace(" ", "")
+            format_type = re.sub(r'[^\w\s-]', '', request.format or "Text").replace(" ", "")
             topic = re.sub(r'[^\w\s-]', '', request.topic or request.title or "Post").replace(" ", "")[:30]
             
             # Find next correlative number
-            base_name = f"{month}_{year}_{content_pillar}_carousel_{topic}"
+            base_name = f"{month}_{year}_{content_pillar}_{post_type}_{format_type}_{topic}"
             correlative = 1
             while True:
                 filename = f"{base_name}_{correlative:02d}.pdf"
