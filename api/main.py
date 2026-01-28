@@ -507,6 +507,8 @@ class CarouselRequest(BaseModel):
     style: str = "professional"  # professional, relaxed, corporate, creative, minimal
     post_id: Optional[str] = None
     save_to_storage: bool = True
+    content_pillar: Optional[str] = None
+    topic: Optional[str] = None
 
 class AIImageRequest(BaseModel):
     prompt: str
@@ -701,6 +703,45 @@ async def generate_carousel(request: CarouselRequest):
             style=request.style
         )
         
+        # Save to local filesystem
+        local_path = None
+        try:
+            from datetime import datetime
+            import os
+            import re
+            
+            # Create folder if doesn't exist
+            base_folder = r"C:\Users\USER\OneDrive\LinkedIn_PersonalBrand\LinkedInAIPosts"
+            os.makedirs(base_folder, exist_ok=True)
+            
+            # Get current date
+            now = datetime.now()
+            month = now.strftime("%b")  # Jan, Feb, Mar, etc.
+            year = now.strftime("%y")   # 26 for 2026
+            
+            # Clean fields for filename
+            content_pillar = re.sub(r'[^\w\s-]', '', request.content_pillar or "General").replace(" ", "")
+            topic = re.sub(r'[^\w\s-]', '', request.topic or request.title or "Post").replace(" ", "")[:30]
+            
+            # Find next correlative number
+            base_name = f"{month}_{year}_{content_pillar}_carousel_{topic}"
+            correlative = 1
+            while True:
+                filename = f"{base_name}_{correlative:02d}.pdf"
+                filepath = os.path.join(base_folder, filename)
+                if not os.path.exists(filepath):
+                    break
+                correlative += 1
+            
+            # Save file
+            with open(filepath, 'wb') as f:
+                f.write(pdf_bytes)
+            
+            local_path = filepath
+            print(f"Carousel saved locally: {filepath}")
+        except Exception as e:
+            print(f"Local save failed: {e}")
+        
         url = None
         if request.save_to_storage and storage_service and request.post_id:
             try:
@@ -716,7 +757,7 @@ async def generate_carousel(request: CarouselRequest):
         if not url:
             url = to_data_uri(pdf_bytes, "application/pdf")
             
-        return {"success": True, "url": url, "type": "carousel"}
+        return {"success": True, "url": url, "type": "carousel", "local_path": local_path}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating carousel: {str(e)}")
