@@ -403,8 +403,8 @@ class MediaGenerator:
         c.setFillColorRGB(*color_scheme["bg"])
         c.rect(0, 0, width, height, fill=1)
         
-        # Cover title - create short summary (6-8 words)
-        cover_title = self._create_summary_title(title, max_words=8)
+        # Cover title - create short summary (intelligently condensed)
+        cover_title = self._create_summary_title(title, max_chars=70)
         
         c.setFillColorRGB(*color_scheme["accent"])
         c.setFont("Helvetica-Bold", 36)
