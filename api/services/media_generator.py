@@ -614,12 +614,21 @@ class MediaGenerator:
                 print(f"Image generation failed: {e}")
                 content_start_y = height - 200
             
-            # Get content and format as bullets
+            # Get content
             content_en = slide.get('content_en', '')
             content_es = slide.get('content_es', '')
             
             # If bilingual content exists
             if content_en and content_es:
+                # Translate English content to proper Spanish using Gemini
+                content_es_translated = self._translate_to_spanish(content_en)
+                
+                # Ensure content ends with period
+                if content_en and not content_en.endswith(('.', '!', '?')):
+                    content_en += '.'
+                if content_es_translated and not content_es_translated.endswith(('.', '!', '?')):
+                    content_es_translated += '.'
+                
                 # Draw vertical divider
                 divider_x = width / 2
                 c.setStrokeColorRGB(*color_scheme["accent"])
@@ -632,37 +641,27 @@ class MediaGenerator:
                 c.drawString(50, content_start_y + 20, "🇺🇸 English")
                 c.drawString(divider_x + 25, content_start_y + 20, "🇪🇸 Español")
                 
-                # Content as bullets (increased font size)
+                # Content as flowing paragraphs with proper wrapping
                 c.setFillColorRGB(*color_scheme["text"])
-                c.setFont("Helvetica", 12)
+                c.setFont("Helvetica", 11)
                 
-                # Process English bullets (left) - ENSURE PERIODS
-                bullets_en = self._format_as_bullets(content_en)
+                # Process English content (left) - wrap as complete text
                 y_pos = content_start_y - 10
-                for bullet in bullets_en[:8]:
-                    # Ensure period at end
-                    if not bullet.endswith(('.', '!', '?')):
-                        bullet += '.'
-                    
-                    c.drawString(50, y_pos, "•")
-                    wrapped = self._wrap_text(bullet, 28)
-                    for line in wrapped[:2]:
-                        c.drawString(65, y_pos, line.strip())
-                        y_pos -= 18
+                wrapped_en = self._wrap_text(content_en, 28)
+                for line in wrapped_en:
+                    if y_pos < 100:  # Stop if too close to bottom
+                        break
+                    c.drawString(50, y_pos, line.strip())
+                    y_pos -= 16
                 
-                # Process Spanish bullets (right) - ENSURE PERIODS
-                bullets_es = self._format_as_bullets(content_es)
+                # Process Spanish content (right) - wrap as complete text
                 y_pos = content_start_y - 10
-                for bullet in bullets_es[:8]:
-                    # Ensure period at end
-                    if not bullet.endswith(('.', '!', '?')):
-                        bullet += '.'
-                    
-                    c.drawString(divider_x + 25, y_pos, "•")
-                    wrapped = self._wrap_text(bullet, 28)
-                    for line in wrapped[:2]:
-                        c.drawString(divider_x + 40, y_pos, line.strip())
-                        y_pos -= 18
+                wrapped_es = self._wrap_text(content_es_translated, 28)
+                for line in wrapped_es:
+                    if y_pos < 100:  # Stop if too close to bottom
+                        break
+                    c.drawString(divider_x + 25, y_pos, line.strip())
+                    y_pos -= 16
             else:
                 # Single language - centered bullets
                 content = slide.get('content', content_en or content_es or '')
