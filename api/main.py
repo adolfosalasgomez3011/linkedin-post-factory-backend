@@ -1,7 +1,7 @@
 """
 FastAPI Backend for LinkedIn Post Factory
 """
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
@@ -815,7 +815,7 @@ async def generate_qrcode(request: QRCodeRequest):
 
 @app.post("/media/generate-carousel")
 async def generate_carousel(request: CarouselRequest):
-    """Generate PDF carousel"""
+    """Generate PDF carousel - returns raw PDF bytes"""
     if not MEDIA_ENABLED:
         raise HTTPException(status_code=501, detail="Media generation not available")
     try:
@@ -825,10 +825,10 @@ async def generate_carousel(request: CarouselRequest):
             style=request.style
         )
         
-        url = None
+        # Also upload to storage if configured
         if request.save_to_storage and storage_service and request.post_id:
             try:
-                url = storage_service.upload_media(
+                storage_service.upload_media(
                     pdf_bytes,
                     request.post_id,
                     "carousel",
@@ -837,10 +837,16 @@ async def generate_carousel(request: CarouselRequest):
             except Exception as e:
                 print(f"Storage upload failed: {e}")
 
-        if not url:
-            url = to_data_uri(pdf_bytes, "application/pdf")
-            
-        return {"success": True, "url": url, "type": "carousel"}
+        # Return raw PDF bytes with proper headers for direct download
+        safe_title = request.title.replace(' ', '_').replace('"', '')[:50]
+        filename = f"carousel_{safe_title}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating carousel: {str(e)}")

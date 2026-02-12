@@ -695,16 +695,81 @@ class MediaGenerator:
         c.save()
         return buffer.getvalue()
     
+    def _call_gemini(self, prompt_text: str) -> str:
+        """Call Gemini API with Vertex AI fallback for cloud environments"""
+        import json
+        
+        is_cloud = os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT")
+        
+        # Try consumer API first (only works locally, not on cloud)
+        if not is_cloud:
+            try:
+                api_key = os.getenv('GOOGLE_API_KEY')
+                if api_key:
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel('gemini-2.0-flash')
+                    response = model.generate_content(prompt_text)
+                    return response.text.strip()
+            except Exception as e:
+                print(f"Consumer Gemini failed: {e}, trying Vertex AI...")
+        
+        # Use Vertex AI (works on cloud servers)
+        import requests
+        from google.auth.transport.requests import Request
+        from google.oauth2 import service_account
+        
+        PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'linkedin-post-factory')
+        LOCATION = 'us-central1'
+        MODEL_ID = 'gemini-2.5-flash'
+        
+        creds_b64 = os.getenv('GCP_CREDENTIALS_JSON_B64')
+        if not creds_b64:
+            raise Exception("No GCP_CREDENTIALS_JSON_B64 env var for Vertex AI")
+        
+        creds_json = base64.b64decode(creds_b64).decode('utf-8')
+        creds_data = json.loads(creds_json)
+        
+        credentials = service_account.Credentials.from_service_account_info(
+            creds_data,
+            scopes=['https://www.googleapis.com/auth/cloud-platform']
+        )
+        if not os.getenv('GCP_PROJECT_ID'):
+            PROJECT_ID = creds_data.get('project_id', PROJECT_ID)
+        
+        auth_req = Request()
+        credentials.refresh(auth_req)
+        
+        url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/{MODEL_ID}:generateContent"
+        
+        data = {
+            "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 500}
+        }
+        
+        response = requests.post(
+            url,
+            headers={
+                'Authorization': f'Bearer {credentials.token}',
+                'Content-Type': 'application/json'
+            },
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            candidates = result.get('candidates', [])
+            if candidates:
+                parts = candidates[0].get('content', {}).get('parts', [])
+                if parts:
+                    return parts[0].get('text', '').strip()
+        
+        raise Exception(f"Vertex AI returned {response.status_code}: {response.text[:200]}")
+
     def _translate_to_spanish(self, english_text: str) -> str:
-        """Translate English text to proper Spanish using Gemini API"""
+        """Translate English text to proper Spanish using Gemini API (with Vertex AI fallback)"""
         try:
-            # Configure Gemini if not already done
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if api_key:
-                genai.configure(api_key=api_key)
-            
-            model = genai.GenerativeModel('gemini-2.0-flash')
-            prompt = f"""Translate ONLY the following English text to Spanish. 
+            prompt_text = f"""Translate ONLY the following English text to Spanish. 
 Return ONLY the Spanish translation, nothing else - no explanations, no options, no extra text.
 Keep it professional and concise.
 
@@ -712,8 +777,7 @@ English: {english_text}
 
 Spanish:"""
             
-            response = model.generate_content(prompt)
-            spanish_text = response.text.strip()
+            spanish_text = self._call_gemini(prompt_text)
             
             # Clean up any markdown, labels, or extra formatting
             spanish_text = spanish_text.replace('**', '').replace('*', '').strip()
@@ -752,12 +816,7 @@ Spanish:"""
         
         # Use Gemini to intelligently condense while keeping meaning
         try:
-            api_key = os.getenv('GOOGLE_API_KEY')
-            if api_key:
-                genai.configure(api_key=api_key)
-            
-            model = genai.GenerativeModel('gemini-2.0-flash')
-            prompt = f"""Condense this text into a short, compelling title (max {max_chars} characters).
+            prompt_text = f"""Condense this text into a short, compelling title (max {max_chars} characters).
 Keep the core meaning but make it concise and punchy.
 Return ONLY the condensed title, nothing else.
 
@@ -765,8 +824,7 @@ Text: {text}
 
 Condensed title:"""
             
-            response = model.generate_content(prompt)
-            condensed = response.text.strip()
+            condensed = self._call_gemini(prompt_text)
             
             # Clean up
             condensed = condensed.replace('**', '').replace('*', '').strip()
@@ -866,43 +924,64 @@ Condensed title:"""
         try:
             import requests
             import json
-            import tempfile
             from google.auth.transport.requests import Request
-            from google.auth import default
-            from google.oauth2.credentials import Credentials
+            from google.oauth2 import service_account
             
-            # Vertex AI configuration (same as MCP server)
-            PROJECT_ID = 'gen-lang-client-0439499588'
+            # Vertex AI configuration - use new clean project
+            PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'linkedin-post-factory')
             LOCATION = 'us-central1'
             MODEL_NAME = 'imagen-3.0-generate-001'
             
             print(f"🎨 Generating image via Vertex AI Imagen 3...")
+            print(f"   Project: {PROJECT_ID}")
             print(f"   Prompt: {prompt[:80]}...")
             
-            # Check if credentials are in environment variable (from Render Secret File)
-            creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            # Load credentials from GCP_CREDENTIALS_JSON_B64 (same as vertex_wrapper.py)
+            credentials = None
+            creds_b64 = os.getenv('GCP_CREDENTIALS_JSON_B64')
             
-            if creds_path and os.path.exists(creds_path):
-                print(f"   Using credentials from: {creds_path}")
-                # Load credentials from file
-                with open(creds_path, 'r') as f:
-                    creds_data = json.load(f)
+            if creds_b64:
+                print(f"   Using credentials from GCP_CREDENTIALS_JSON_B64")
+                creds_json = base64.b64decode(creds_b64).decode('utf-8')
+                creds_data = json.loads(creds_json)
                 
-                # Create credentials object
-                credentials = Credentials(
-                    token=None,
-                    refresh_token=creds_data.get('refresh_token'),
-                    token_uri='https://oauth2.googleapis.com/token',
-                    client_id=creds_data.get('client_id'),
-                    client_secret=creds_data.get('client_secret'),
-                    scopes=['https://www.googleapis.com/auth/cloud-platform']
-                )
+                cred_type = creds_data.get('type', '')
+                if cred_type == 'service_account':
+                    credentials = service_account.Credentials.from_service_account_info(
+                        creds_data,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                    # Use project from credentials if not set
+                    if not os.getenv('GCP_PROJECT_ID'):
+                        PROJECT_ID = creds_data.get('project_id', PROJECT_ID)
+                else:
+                    from google.oauth2.credentials import Credentials
+                    credentials = Credentials(
+                        token=None,
+                        refresh_token=creds_data.get('refresh_token'),
+                        token_uri='https://oauth2.googleapis.com/token',
+                        client_id=creds_data.get('client_id'),
+                        client_secret=creds_data.get('client_secret'),
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
             else:
-                print(f"   Using default credentials (ADC)")
-                # Get credentials using Google Auth default
-                credentials, project = default(
-                    scopes=['https://www.googleapis.com/auth/cloud-platform']
-                )
+                # Fallback: try GOOGLE_APPLICATION_CREDENTIALS file path
+                creds_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+                if creds_path and os.path.exists(creds_path):
+                    print(f"   Using credentials from: {creds_path}")
+                    credentials = service_account.Credentials.from_service_account_file(
+                        creds_path,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                else:
+                    print(f"   Using default credentials (ADC)")
+                    from google.auth import default
+                    credentials, project = default(
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+            
+            if not credentials:
+                raise Exception("No credentials available for Vertex AI")
             
             # Get access token
             auth_req = Request()
