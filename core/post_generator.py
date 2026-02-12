@@ -238,8 +238,17 @@ Generate the post text, then provide hashtags separately."""
     
     def _generate_gemini(self, prompt: str) -> str:
         """Generate using Gemini (Google)"""
-        response = self.gemini.generate_content(prompt)
-        return response.text
+        try:
+            if not self.gemini:
+                raise ValueError("Gemini client not initialized")
+            response = self.gemini.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            # Fallback to OpenAI if Gemini fails (e.g. geo-blocking)
+            if self.openai_client:
+                print(f"Gemini failed ({e}), falling back to OpenAI...")
+                return self._generate_gpt4(prompt)
+            raise e
     
     def _parse_response(self, text: str) -> Dict:
         """Parse AI response into structured format"""
