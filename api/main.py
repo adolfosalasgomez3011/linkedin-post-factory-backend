@@ -147,6 +147,31 @@ async def test_vertex_generation():
     
     return results
 
+@app.get("/debug/test-generate")
+async def test_generate_flow():
+    """Test the exact post generation flow step by step"""
+    steps = []
+    try:
+        steps.append("1. Starting generate_post flow...")
+        steps.append(f"2. generator.vertex exists={generator.vertex is not None}")
+        steps.append(f"3. generator.vertex.credentials={generator.vertex.credentials is not None if generator.vertex else 'N/A'}")
+        steps.append(f"4. generator.vertex.project_id={generator.vertex.project_id if generator.vertex else 'N/A'}")
+        steps.append(f"5. generator.vertex.model_name={generator.vertex.model_name if generator.vertex else 'N/A'}")
+        steps.append(f"6. generator.gemini={generator.gemini is not None}")
+        steps.append(f"7. RENDER env={os.getenv('RENDER')}")
+        
+        steps.append("8. Building prompt...")
+        prompt = "Generate a short LinkedIn post about AI. Keep it under 200 words."
+        
+        steps.append("9. Calling _generate_gemini...")
+        text = generator._generate_gemini(prompt)
+        steps.append(f"10. Got response: {str(text)[:300]}")
+        
+        return {"success": True, "steps": steps, "preview": str(text)[:500]}
+    except Exception as e:
+        import traceback
+        return {"success": False, "steps": steps, "error": f"{type(e).__name__}: {str(e)}", "traceback": traceback.format_exc()}
+
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
