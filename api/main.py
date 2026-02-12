@@ -115,6 +115,38 @@ async def diagnose_environment():
         "genai_lib_version": genai.__version__
     }
 
+@app.get("/debug/test-vertex")
+async def test_vertex_generation():
+    """Test Vertex AI generation directly"""
+    results = {"steps": []}
+    try:
+        from core.vertex_wrapper import VertexWrapper
+        results["steps"].append("1. VertexWrapper imported OK")
+        
+        wrapper = VertexWrapper()
+        results["steps"].append(f"2. Wrapper created. project_id={wrapper.project_id}, has_creds={wrapper.credentials is not None}, model={wrapper.model_name}")
+        
+        if not wrapper.credentials:
+            results["error"] = "No credentials loaded"
+            return results
+        
+        results["steps"].append("3. Refreshing token...")
+        from google.auth.transport.requests import Request as AuthReq
+        if not wrapper.credentials.valid:
+            wrapper.credentials.refresh(AuthReq())
+        results["steps"].append(f"4. Token valid={wrapper.credentials.valid}")
+        
+        results["steps"].append("5. Calling generate_content...")
+        response = wrapper.generate_content("Reply with exactly: VERTEX_OK")
+        results["steps"].append(f"6. Response received: {str(response)[:200] if response else 'None'}")
+        results["success"] = response is not None
+        results["response_preview"] = str(response)[:500] if response else None
+        
+    except Exception as e:
+        results["error"] = f"{type(e).__name__}: {str(e)}"
+    
+    return results
+
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
