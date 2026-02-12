@@ -42,7 +42,7 @@ class PostGenerator:
             # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
             try:
                 genai.configure(api_key=google_key, transport='rest')
-                self.gemini = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini = genai.GenerativeModel('gemini-2.0-flash')
             except Exception as e:
                 print(f"Gemini initialization error: {e}")
                 self.gemini = None

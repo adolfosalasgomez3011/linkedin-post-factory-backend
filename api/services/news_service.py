@@ -27,7 +27,7 @@ class NewsService:
             try:
                 # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
                 genai.configure(api_key=google_key, transport='rest')
-                self.model = genai.GenerativeModel('gemini-1.5-flash')
+                self.model = genai.GenerativeModel('gemini-2.0-flash')
             except Exception as e:
                 print(f"Warning: Gemini standard init failed: {e}")
                 self.model = None
