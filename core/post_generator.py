@@ -251,14 +251,22 @@ Generate the post text, then provide hashtags separately."""
         """Generate using Gemini (Google)"""
         error_msg = ""
         
-        # 1. Try Standard Gemini (Consumer API)
-        try:
-            if self.gemini:
-                response = self.gemini.generate_content(prompt)
-                return response.text
-        except Exception as e:
-            error_msg = str(e)
-            print(f"Standard Gemini failed ({e}), trying fallbacks...")
+        # On Render (cloud), skip standard Gemini entirely - it always fails with geo-block
+        # Go straight to Vertex AI which we know works
+        is_cloud = os.getenv("RENDER") or os.getenv("RAILWAY_ENVIRONMENT")
+        
+        # 1. Try Standard Gemini (Consumer API) - Only on local dev
+        if not is_cloud:
+            try:
+                if self.gemini:
+                    response = self.gemini.generate_content(prompt)
+                    return response.text
+            except Exception as e:
+                error_msg = str(e)
+                print(f"Standard Gemini failed ({e}), trying fallbacks...")
+        else:
+            error_msg = "Skipped on cloud (geo-blocked)"
+            print("Skipping standard Gemini on cloud, using Vertex AI directly...")
 
         # 2. Try Vertex AI (Enterprise API - Bypasses Geo Block)
         vertex_error = ""
