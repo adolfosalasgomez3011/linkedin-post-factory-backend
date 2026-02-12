@@ -233,8 +233,21 @@ Generate the post text, then provide hashtags separately."""
     
     def _generate_gemini(self, prompt: str) -> str:
         """Generate using Gemini (Google)"""
-        response = self.gemini.generate_content(prompt)
-        return response.text
+        try:
+            response = self.gemini.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            # Fallback for "Time Travel" scenario (1.5 deprecated in 2026 env)
+            if "404" in str(e) or "not found" in str(e).lower():
+                try:
+                    fallback_model = genai.GenerativeModel('gemini-2.5-flash')
+                    response = fallback_model.generate_content(prompt)
+                    return response.text
+                except Exception as e2:
+                    print(f"Fallback model failed: {e2}")
+            
+            # Re-raise original error if fallback didn't work/apply
+            raise e
     
     def _parse_response(self, text: str) -> Dict:
         """Parse AI response into structured format"""
