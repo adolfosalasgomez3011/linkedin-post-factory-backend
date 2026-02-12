@@ -14,7 +14,7 @@ class NewsService:
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-2.5-flash')
         else:
             self.model = None
     
@@ -62,16 +62,6 @@ class NewsService:
             return articles
             
         except Exception as e:
-            # Fallback to 2.5-flash if 1.5-flash is not found (Time Travel Handling)
-            if "404" in str(e) or "not found" in str(e).lower():
-                try:
-                    print("Retrying with gemini-2.5-flash due to version error...")
-                    fallback_model = genai.GenerativeModel('gemini-2.5-flash')
-                    response = fallback_model.generate_content(prompt)
-                    return self._parse_ai_articles(response.text, category, count)
-                except Exception as e2:
-                    print(f"Fallback model also failed: {e2}")
-            
             print(f"Error fetching trending articles: {e}")
             articles = self._get_fallback_articles(category, count)
             # Inject error info into the first article title for visibility in frontend
