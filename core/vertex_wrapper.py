@@ -4,6 +4,7 @@ import base64
 import requests
 from typing import Optional, Dict, Any
 from google.oauth2 import service_account
+from google.oauth2 import credentials as authorized_user_credentials
 from google.auth.transport.requests import Request as AuthRequest
 
 class VertexWrapper:
@@ -27,12 +28,27 @@ class VertexWrapper:
             try:
                 creds_json = base64.b64decode(b64_creds).decode('utf-8')
                 creds_dict = json.loads(creds_json)
-                self.credentials = service_account.Credentials.from_service_account_info(
-                    creds_dict,
-                    scopes=['https://www.googleapis.com/auth/cloud-platform']
-                )
-                if not self.project_id:
-                    self.project_id = creds_dict.get('project_id')
+                
+                # Check credential type
+                cred_type = creds_dict.get('type')
+                
+                if cred_type == 'service_account':
+                    self.credentials = service_account.Credentials.from_service_account_info(
+                        creds_dict,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                    if not self.project_id:
+                        self.project_id = creds_dict.get('project_id')
+                
+                elif cred_type == 'authorized_user':
+                    self.credentials = authorized_user_credentials.Credentials.from_authorized_user_info(
+                        creds_dict,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                    if not self.project_id:
+                        # Authorized user credentials use quota_project_id
+                        self.project_id = creds_dict.get('quota_project_id')
+                
                 return
             except Exception as e:
                 print(f"Failed to load credentials from Base64: {e}")
@@ -41,15 +57,29 @@ class VertexWrapper:
         local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'gcp-credentials.json')
         if os.path.exists(local_path):
             try:
-                self.credentials = service_account.Credentials.from_service_account_file(
-                    local_path,
-                    scopes=['https://www.googleapis.com/auth/cloud-platform']
-                )
-                if not self.project_id:
-                    # Parse file to get project_id if not set
-                    with open(local_path, 'r') as f:
-                        data = json.load(f)
-                        self.project_id = data.get('project_id')
+                with open(local_path, 'r') as f:
+                    creds_dict = json.load(f)
+
+                # Check credential type
+                cred_type = creds_dict.get('type')
+                
+                if cred_type == 'service_account':
+                    self.credentials = service_account.Credentials.from_service_account_file(
+                        local_path,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                    if not self.project_id:
+                        self.project_id = creds_dict.get('project_id')
+                
+                elif cred_type == 'authorized_user':
+                    # For file based authorized user, we need to load differently or reuse the dict logic
+                    self.credentials = authorized_user_credentials.Credentials.from_authorized_user_info(
+                        creds_dict,
+                        scopes=['https://www.googleapis.com/auth/cloud-platform']
+                    )
+                    if not self.project_id:
+                        self.project_id = creds_dict.get('quota_project_id')
+                
                 return
             except Exception as e:
                 print(f"Failed to load credentials from file: {e}")
