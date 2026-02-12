@@ -74,6 +74,11 @@ async def diagnose_environment():
     error_message = None
     
     try:
+        # Check if OpenAI is available as fallback
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+             available_models.append({"name": "gpt-4o", "display_name": "OpenAI GPT-4o (Fallback Available)"})
+
         if api_key:
             models = genai.list_models()
             # Filter to relevant models and convert to list of dicts

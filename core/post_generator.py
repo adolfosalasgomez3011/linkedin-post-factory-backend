@@ -29,8 +29,12 @@ class PostGenerator:
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
-            genai.configure(api_key=google_key, transport='rest')
-            self.gemini = genai.GenerativeModel('gemini-1.5-flash')
+            try:
+                genai.configure(api_key=google_key, transport='rest')
+                self.gemini = genai.GenerativeModel('gemini-1.5-flash')
+            except Exception as e:
+                print(f"Gemini initialization error: {e}")
+                self.gemini = None
         else:
             self.gemini = None
         
