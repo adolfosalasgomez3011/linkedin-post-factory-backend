@@ -25,11 +25,11 @@ class PostGenerator:
     
     def _init_ai_clients(self):
         """Initialize AI provider clients"""
-        # Gemini (Google) - Primary provider (2.5 Pro - latest)
+        # Gemini (Google) - Primary provider (1.5 Pro - latest stable)
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
-            self.gemini = genai.GenerativeModel('gemini-2.5-pro')
+            self.gemini = genai.GenerativeModel('gemini-1.5-pro')
         else:
             self.gemini = None
         
