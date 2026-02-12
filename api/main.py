@@ -64,7 +64,8 @@ async def diagnose_environment():
         masked_key = f"{api_key[:4]}...{api_key[-4:]}"
         api_key_status = f"Present ({masked_key})"
         try:
-            genai.configure(api_key=api_key)
+            # Force REST transport for diagnostics
+            genai.configure(api_key=api_key, transport='rest')
         except Exception as e:
             api_key_status = f"Error configuring: {str(e)}"
     

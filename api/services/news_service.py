@@ -13,7 +13,8 @@ class NewsService:
     def __init__(self):
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
-            genai.configure(api_key=google_key)
+            # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
+            genai.configure(api_key=google_key, transport='rest')
             self.model = genai.GenerativeModel('gemini-1.5-flash')
         else:
             self.model = None
