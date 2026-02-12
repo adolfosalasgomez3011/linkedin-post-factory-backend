@@ -59,7 +59,11 @@ async def diagnose_environment():
     
     # 2. Check API Key presence
     api_key = os.getenv("GOOGLE_API_KEY")
+    vertex_creds = os.getenv("GCP_CREDENTIALS_JSON_B64")
+    
     api_key_status = "Not Set"
+    vertex_status = "Not Configured"
+    
     if api_key:
         masked_key = f"{api_key[:4]}...{api_key[-4:]}"
         api_key_status = f"Present ({masked_key})"
@@ -68,6 +72,9 @@ async def diagnose_environment():
             genai.configure(api_key=api_key, transport='rest')
         except Exception as e:
             api_key_status = f"Error configuring: {str(e)}"
+            
+    if vertex_creds:
+        vertex_status = "Configured (Ready for Bypass)"
     
     # 3. List Available Models
     available_models = []
@@ -101,6 +108,7 @@ async def diagnose_environment():
     return {
         "system_time": system_time.isoformat(),
         "api_key_status": api_key_status,
+        "vertex_ai_status": vertex_status,
         "environment": env_vars,
         "available_models": available_models,
         "genai_error": error_message,

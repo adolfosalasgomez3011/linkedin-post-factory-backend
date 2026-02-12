@@ -6,16 +6,31 @@ import os
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import google.generativeai as genai
+try:
+    from core.vertex_wrapper import VertexWrapper
+except ImportError:
+    VertexWrapper = None
 
 class NewsService:
     """Fetch trending news and topics for LinkedIn posts"""
     
     def __init__(self):
+        # Initialize Vertex AI (Enterprise)
+        if VertexWrapper:
+            self.vertex = VertexWrapper()
+        else:
+            self.vertex = None
+
+        # Initialize Standard Gemini (Consumer)
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
-            # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
-            genai.configure(api_key=google_key, transport='rest')
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            try:
+                # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
+                genai.configure(api_key=google_key, transport='rest')
+                self.model = genai.GenerativeModel('gemini-1.5-flash')
+            except Exception as e:
+                print(f"Warning: Gemini standard init failed: {e}")
+                self.model = None
         else:
             self.model = None
     
@@ -55,11 +70,27 @@ class NewsService:
             Focus on AI, innovation, business, technology, and leadership topics.
             """
             
-            response = self.model.generate_content(prompt)
+            text_response = None
             
+            # 1. Try Standard Gemini
+            try:
+                if self.model:
+                    response = self.model.generate_content(prompt)
+                    text_response = response.text
+            except Exception as e:
+                print(f"Standard Gemini News failed: {e}")
+            
+            # 2. Try Vertex AI Fallback
+            if not text_response and self.vertex and self.vertex.credentials:
+                print("Using Vertex AI for News...")
+                text_response = self.vertex.generate_content(prompt)
+            
+            if not text_response:
+                raise Exception("All AI providers failed to generate news")
+
             # Parse the response and structure it
             # For now, return structured data based on the AI response
-            articles = self._parse_ai_articles(response.text, category, count)
+            articles = self._parse_ai_articles(text_response, category, count)
             return articles
             
         except Exception as e:
