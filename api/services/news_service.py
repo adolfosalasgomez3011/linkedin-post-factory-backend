@@ -14,7 +14,7 @@ class NewsService:
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            self.model = genai.GenerativeModel('gemini-2.0-flash')
         else:
             self.model = None
     
