@@ -14,7 +14,7 @@ class NewsService:
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
         else:
             self.model = None
     
@@ -37,9 +37,12 @@ class NewsService:
             return self._get_fallback_articles(category, count)
         
         try:
+            # Get current month and year
+            current_date = datetime.now().strftime("%B %Y")
+            
             # Use Gemini to generate current trending topics
             prompt = f"""Generate {count} realistic trending news headlines and summaries for {category} 
-            that would be relevant for LinkedIn content creators in January 2026.
+            that would be relevant for LinkedIn content creators in {current_date}.
             
             For each article provide:
             - title: catchy headline
