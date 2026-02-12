@@ -3,13 +3,14 @@ FastAPI Backend for LinkedIn Post Factory
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import sys
 import uuid
 import base64
+import os
+import google.generativeai as genai
 from pathlib import Path
 
 # Helper for data URIs
@@ -49,6 +50,57 @@ async def health_check():
     """Health check endpoint for monitoring"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
+@app.get("/debug/diagnose")
+async def diagnose_environment():
+    """Diagnostic endpoint to check environment and available models"""
+    
+    # 1. Check System Time
+    system_time = datetime.now()
+    
+    # 2. Check API Key presence
+    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key_status = "Not Set"
+    if api_key:
+        masked_key = f"{api_key[:4]}...{api_key[-4:]}"
+        api_key_status = f"Present ({masked_key})"
+        try:
+            genai.configure(api_key=api_key)
+        except Exception as e:
+            api_key_status = f"Error configuring: {str(e)}"
+    
+    # 3. List Available Models
+    available_models = []
+    error_message = None
+    
+    try:
+        if api_key:
+            models = genai.list_models()
+            # Filter to relevant models and convert to list of dicts
+            for m in models:
+                if 'generateContent' in m.supported_generation_methods:
+                    available_models.append({
+                        "name": m.name,
+                        "display_name": m.display_name
+                    })
+    except Exception as e:
+        error_message = str(e)
+
+    # 4. Check Environment Variables
+    env_vars = {
+        "RENDER": os.getenv("RENDER"),
+        "RENDER_SERVICE_ID": os.getenv("RENDER_SERVICE_ID"),
+        "REGION": os.getenv("RENDER_REGION"), # Render specific
+    }
+
+    return {
+        "system_time": system_time.isoformat(),
+        "api_key_status": api_key_status,
+        "environment": env_vars,
+        "available_models": available_models,
+        "genai_error": error_message,
+        "genai_lib_version": genai.__version__
+    }
+
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
@@ -56,7 +108,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition"],  # Allow frontend to read this header
 )
 
 # Initialize services
@@ -509,10 +560,6 @@ class CarouselRequest(BaseModel):
     style: str = "professional"  # professional, relaxed, corporate, creative, minimal
     post_id: Optional[str] = None
     save_to_storage: bool = True
-    content_pillar: Optional[str] = None
-    post_type: Optional[str] = None
-    format: Optional[str] = None
-    topic: Optional[str] = None
 
 class AIImageRequest(BaseModel):
     prompt: str
@@ -701,93 +748,28 @@ async def generate_carousel(request: CarouselRequest):
     if not MEDIA_ENABLED:
         raise HTTPException(status_code=501, detail="Media generation not available")
     try:
-        # DEBUG: Print what we received
-        print("\n========== CAROUSEL REQUEST DEBUG ==========")
-        print(f"Title: {request.title}")
-        print(f"Content Pillar: {request.content_pillar}")
-        print(f"Post Type: {request.post_type}")
-        print(f"Format: {request.format}")
-        print(f"Topic: {request.topic}")
-        print(f"Style: {request.style}")
-        print("============================================\n")
-        
         pdf_bytes = media_generator.generate_carousel_pdf(
             slides=request.slides,
             title=request.title,
             style=request.style
         )
         
-        # Save to local filesystem
-        local_path = None
-        try:
-            from datetime import datetime
-            import os
-            import re
+        url = None
+        if request.save_to_storage and storage_service and request.post_id:
+            try:
+                url = storage_service.upload_media(
+                    pdf_bytes,
+                    request.post_id,
+                    "carousel",
+                    "pdf"
+                )
+            except Exception as e:
+                print(f"Storage upload failed: {e}")
+
+        if not url:
+            url = to_data_uri(pdf_bytes, "application/pdf")
             
-            # Create folder if doesn't exist
-            base_folder = r"C:\Users\USER\OneDrive\LinkedIn_PersonalBrand\LinkedInAIPosts"
-            os.makedirs(base_folder, exist_ok=True)
-            print(f"DEBUG: Base folder: {base_folder}")
-            
-            # Get current date
-            now = datetime.now()
-            month = now.strftime("%b")  # Jan, Feb, Mar, etc.
-            year = now.strftime("%y")   # 26 for 2026
-            
-            # Clean fields for filename
-            content_pillar = re.sub(r'[^\w\s-]', '', request.content_pillar or "General").replace(" ", "")
-            post_type = re.sub(r'[^\w\s-]', '', request.post_type or "Standard").replace(" ", "")
-            format_type = re.sub(r'[^\w\s-]', '', request.format or "Text").replace(" ", "")
-            topic = re.sub(r'[^\w\s-]', '', request.topic or request.title or "Post").replace(" ", "")[:30]
-            
-            print(f"DEBUG: Cleaned - pillar={content_pillar}, type={post_type}, format={format_type}, topic={topic}")
-            
-            # Find next correlative number
-            base_name = f"{month}_{year}_{content_pillar}_{post_type}_{format_type}_{topic}"
-            print(f"DEBUG: Base name: {base_name}")
-            
-            correlative = 1
-            while True:
-                filename = f"{base_name}_{correlative:02d}.pdf"
-                filepath = os.path.join(base_folder, filename)
-                if not os.path.exists(filepath):
-                    break
-                correlative += 1
-            
-            print(f"DEBUG: Final filepath: {filepath}")
-            
-            # Save file
-            with open(filepath, 'wb') as f:
-                f.write(pdf_bytes)
-            
-            local_path = filepath
-            print(f"✓ Carousel would save to: {filepath}")
-        except Exception as e:
-            print(f"✗ Path generation failed: {e}")
-            import traceback
-            traceback.print_exc()
-            # Set defaults if path generation failed
-            month = "Jan"
-            year = "26"
-            content_pillar = "General"
-            post_type = "Standard"
-            format_type = "Text"
-            topic = "Post"
-            correlative = 1
-        
-        # Generate filename for download
-        filename = f"{month}_{year}_{content_pillar}_{post_type}_{format_type}_{topic}_{correlative:02d}.pdf"
-        print(f"DEBUG: Download filename: {filename}")
-        
-        # Return PDF as downloadable file
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Content-Type": "application/pdf"
-            }
-        )
+        return {"success": True, "url": url, "type": "carousel"}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating carousel: {str(e)}")
