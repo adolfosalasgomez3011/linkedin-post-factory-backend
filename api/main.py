@@ -178,27 +178,59 @@ async def test_imagen():
     """Test Imagen 3 image generation on Render"""
     steps = []
     try:
-        steps.append("1. Checking MEDIA_ENABLED...")
-        steps.append(f"   MEDIA_ENABLED={MEDIA_ENABLED}")
+        import json as jsonlib
+        from google.oauth2 import service_account as sa
+        from google.auth.transport.requests import Request as AuthReq
+        import requests
         
-        if MEDIA_ENABLED:
-            steps.append("2. Calling generate_realistic_image with simple prompt...")
-            img_bytes = media_generator.generate_realistic_image("A simple blue gradient background")
-            steps.append(f"3. Got {len(img_bytes)} bytes")
-            
-            # Check if it's a real image or a fallback placeholder
-            from PIL import Image as PILImage
-            img = PILImage.open(io.BytesIO(img_bytes))
-            steps.append(f"4. Image size: {img.size}, mode: {img.mode}")
-            
-            # A real Imagen image is usually > 50KB, fallback is < 20KB
-            is_likely_real = len(img_bytes) > 50000
-            steps.append(f"5. Likely real AI image: {is_likely_real} (size threshold: >50KB)")
-            
-            return {"success": True, "steps": steps, "image_bytes": len(img_bytes), "likely_real": is_likely_real}
+        steps.append(f"1. MEDIA_ENABLED={MEDIA_ENABLED}")
+        
+        # Manually test Imagen API to capture exact error
+        PROJECT_ID = os.getenv('GCP_PROJECT_ID', 'linkedin-post-factory')
+        LOCATION = 'us-central1'
+        MODEL_NAME = 'imagen-3.0-generate-001'
+        
+        creds_b64 = os.getenv('GCP_CREDENTIALS_JSON_B64')
+        if not creds_b64:
+            return {"success": False, "steps": steps, "error": "No GCP_CREDENTIALS_JSON_B64"}
+        
+        creds_data = jsonlib.loads(base64.b64decode(creds_b64))
+        steps.append(f"2. Project: {creds_data.get('project_id')}, SA: {creds_data.get('client_email')}")
+        
+        credentials = sa.Credentials.from_service_account_info(
+            creds_data, scopes=['https://www.googleapis.com/auth/cloud-platform']
+        )
+        credentials.refresh(AuthReq())
+        steps.append(f"3. Token obtained: {bool(credentials.token)}")
+        
+        url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{creds_data.get('project_id')}/locations/{LOCATION}/publishers/google/models/{MODEL_NAME}:predict"
+        steps.append(f"4. URL: {url}")
+        
+        data = {
+            "instances": [{"prompt": "A simple blue gradient"}],
+            "parameters": {"sampleCount": 1, "aspectRatio": "16:9"}
+        }
+        
+        resp = requests.post(url, headers={
+            'Authorization': f'Bearer {credentials.token}',
+            'Content-Type': 'application/json'
+        }, json=data, timeout=30)
+        
+        steps.append(f"5. Response status: {resp.status_code}")
+        
+        if resp.status_code == 200:
+            result = resp.json()
+            preds = result.get('predictions', [])
+            if preds and preds[0].get('bytesBase64Encoded'):
+                img_size = len(base64.b64decode(preds[0]['bytesBase64Encoded']))
+                steps.append(f"6. SUCCESS! Image: {img_size} bytes")
+                return {"success": True, "steps": steps, "image_bytes": img_size}
+            else:
+                steps.append(f"6. No predictions in response: {str(result)[:300]}")
         else:
-            steps.append("2. Media generation not enabled - missing dependencies")
-            return {"success": False, "steps": steps}
+            steps.append(f"6. ERROR: {resp.text[:500]}")
+        
+        return {"success": False, "steps": steps}
     except Exception as e:
         import traceback
         return {"success": False, "steps": steps, "error": f"{type(e).__name__}: {str(e)}", "traceback": traceback.format_exc()}
