@@ -179,6 +179,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Initialize services
@@ -629,6 +630,7 @@ class CarouselRequest(BaseModel):
     slides: List[Dict[str, str]]
     title: str
     style: str = "professional"  # professional, relaxed, corporate, creative, minimal
+    content_pillar: Optional[str] = None
     post_id: Optional[str] = None
     save_to_storage: bool = True
 
@@ -837,9 +839,26 @@ async def generate_carousel(request: CarouselRequest):
             except Exception as e:
                 print(f"Storage upload failed: {e}")
 
-        # Return raw PDF bytes with proper headers for direct download
-        safe_title = request.title.replace(' ', '_').replace('"', '')[:50]
-        filename = f"carousel_{safe_title}.pdf"
+        # Build filename with convention: IndepthCarousel_{Pillar}_{MonthDay}.pdf
+        from datetime import datetime as dt
+        now = dt.now()
+        month_day = now.strftime("%b%d")  # e.g. Feb12
+        
+        # Extract pillar name from content_pillar field
+        pillar = request.content_pillar or 'General'
+        # Clean pillar: remove '&', spaces, special chars -> CamelCase
+        pillar_clean = pillar.replace('&', '').replace(' ', '')
+        # Map common pillar names
+        pillar_map = {
+            'AIInnovation': 'AIInnovation',
+            'TechLeadership': 'TechLeadership',
+            'CareerGrowth': 'CareerGrowth',
+            'IndustryInsights': 'IndustryInsights',
+            'PersonalBrand': 'PersonalBrand',
+        }
+        pillar_label = pillar_map.get(pillar_clean, pillar_clean)
+        
+        filename = f"IndepthCarousel_{pillar_label}_{month_day}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",

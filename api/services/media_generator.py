@@ -1036,78 +1036,41 @@ Condensed title:"""
             print(f"   Error type: {type(e).__name__}")
             print(f"   Error message: {str(e)}")
             import traceback
-            print(f"   Traceback:")
             traceback.print_exc()
-            print(f"   GOOGLE_APPLICATION_CREDENTIALS env var: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS')}")
-            print(f"   Falling back to styled gradient placeholder")
-            # Fallback: Create professional gradient
+            print(f"   Falling back to clean gradient placeholder")
+            
+            # Fallback: Clean professional gradient (no text overlay)
             img = Image.new('RGB', (1200, 675), (15, 20, 30))
-        draw = ImageDraw.Draw(img)
-        
-        # Multi-layer gradient for depth
-        for y in range(675):
-            factor = y / 675
-            # Deep blue to cyan gradient
-            r = int(15 + 45 * factor)
-            g = int(20 + 120 * factor)
-            b = int(30 + 180 * factor)
-            draw.line([(0, y), (1200, y)], fill=(r, g, b))
-        
-        # Add geometric overlay for visual interest
-        overlay = Image.new('RGBA', (1200, 675), (0, 0, 0, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        
-        # Diagonal lines pattern
-        for i in range(0, 1400, 100):
-            overlay_draw.line([(i-200, 0), (i, 675)], fill=(255, 255, 255, 8), width=2)
-        
-        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
-        draw = ImageDraw.Draw(img)
-        
-        # Add centered text with prompt
-        try:
-            title_font = ImageFont.truetype("arial.ttf", 52)
-            subtitle_font = ImageFont.truetype("arial.ttf", 28)
-        except:
-            title_font = ImageFont.load_default()
-            subtitle_font = ImageFont.load_default()
-        
-        # Wrap prompt text
-        words = prompt.split()
-        lines = []
-        current = []
-        for word in words:
-            current.append(word)
-            test_line = ' '.join(current)
-            if len(test_line) > 35:
-                current.pop()
-                if current:
-                    lines.append(' '.join(current))
-                current = [word]
-        if current:
-            lines.append(' '.join(current))
-        
-        # Draw text with shadow
-        y_offset = 220
-        for line in lines[:3]:
-            bbox = draw.textbbox((0, 0), line, font=title_font)
-            text_w = bbox[2] - bbox[0]
-            x = (1200 - text_w) / 2
-            # Shadow
-            draw.text((x+3, y_offset+3), line, fill=(0, 0, 0, 180), font=title_font)
-            # Main text
-            draw.text((x, y_offset), line, fill=(255, 255, 255), font=title_font)
-            y_offset += 70
-        
-        # Watermark
-        watermark = "AI Generated Visual"
-        wm_bbox = draw.textbbox((0, 0), watermark, font=subtitle_font)
-        wm_w = wm_bbox[2] - wm_bbox[0]
-        draw.text((1200 - wm_w - 30, 635), watermark, fill=(255, 255, 255, 100), font=subtitle_font)
-        
-        output = io.BytesIO()
-        img.save(output, format='PNG', quality=95)
-        return output.getvalue()
+            draw = ImageDraw.Draw(img)
+            
+            # Multi-layer gradient for depth
+            for y in range(675):
+                factor = y / 675
+                r = int(15 + 45 * factor)
+                g = int(20 + 120 * factor)
+                b = int(30 + 180 * factor)
+                draw.line([(0, y), (1200, y)], fill=(r, g, b))
+            
+            # Add geometric overlay for visual interest
+            overlay = Image.new('RGBA', (1200, 675), (0, 0, 0, 0))
+            overlay_draw = ImageDraw.Draw(overlay)
+            
+            # Diagonal lines pattern
+            for i in range(0, 1400, 100):
+                overlay_draw.line([(i-200, 0), (i, 675)], fill=(255, 255, 255, 8), width=2)
+            
+            # Subtle circle accents
+            for cx, cy, r in [(200, 200, 120), (900, 400, 160), (600, 100, 80)]:
+                overlay_draw.ellipse(
+                    [(cx-r, cy-r), (cx+r, cy+r)],
+                    outline=(255, 255, 255, 15), width=2
+                )
+            
+            img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+            
+            output = io.BytesIO()
+            img.save(output, format='PNG', quality=95)
+            return output.getvalue()
     
     def _get_bg_color(self, style: str) -> Tuple[int, int, int]:
         """Get background color for style"""
