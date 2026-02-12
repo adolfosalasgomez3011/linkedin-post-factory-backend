@@ -29,7 +29,7 @@ class PostGenerator:
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
-            self.gemini = genai.GenerativeModel('gemini-1.5-flash')
+            self.gemini = genai.GenerativeModel('gemini-2.5-flash')
         else:
             self.gemini = None
         
