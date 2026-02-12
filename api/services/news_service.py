@@ -14,7 +14,7 @@ class NewsService:
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
         else:
             self.model = None
     
@@ -63,7 +63,11 @@ class NewsService:
             
         except Exception as e:
             print(f"Error fetching trending articles: {e}")
-            return self._get_fallback_articles(category, count)
+            articles = self._get_fallback_articles(category, count)
+            # Inject error info into the first article title for visibility in frontend
+            articles[0]["title"] = f"ERROR: {str(e)[:100]}"
+            articles[0]["summary"] = "The AI generation failed. This is the fallback content."
+            return articles
     
     def _parse_ai_articles(self, ai_response: str, category: str, count: int) -> List[Dict]:
         """Parse AI-generated articles into structured format"""
