@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import sys
 import uuid
+import io
 import base64
 import os
 import google.generativeai as genai
@@ -168,6 +169,36 @@ async def test_generate_flow():
         steps.append(f"10. Got response: {str(text)[:300]}")
         
         return {"success": True, "steps": steps, "preview": str(text)[:500]}
+    except Exception as e:
+        import traceback
+        return {"success": False, "steps": steps, "error": f"{type(e).__name__}: {str(e)}", "traceback": traceback.format_exc()}
+
+@app.get("/debug/test-imagen")
+async def test_imagen():
+    """Test Imagen 3 image generation on Render"""
+    steps = []
+    try:
+        steps.append("1. Checking MEDIA_ENABLED...")
+        steps.append(f"   MEDIA_ENABLED={MEDIA_ENABLED}")
+        
+        if MEDIA_ENABLED:
+            steps.append("2. Calling generate_realistic_image with simple prompt...")
+            img_bytes = media_generator.generate_realistic_image("A simple blue gradient background")
+            steps.append(f"3. Got {len(img_bytes)} bytes")
+            
+            # Check if it's a real image or a fallback placeholder
+            from PIL import Image as PILImage
+            img = PILImage.open(io.BytesIO(img_bytes))
+            steps.append(f"4. Image size: {img.size}, mode: {img.mode}")
+            
+            # A real Imagen image is usually > 50KB, fallback is < 20KB
+            is_likely_real = len(img_bytes) > 50000
+            steps.append(f"5. Likely real AI image: {is_likely_real} (size threshold: >50KB)")
+            
+            return {"success": True, "steps": steps, "image_bytes": len(img_bytes), "likely_real": is_likely_real}
+        else:
+            steps.append("2. Media generation not enabled - missing dependencies")
+            return {"success": False, "steps": steps}
     except Exception as e:
         import traceback
         return {"success": False, "steps": steps, "error": f"{type(e).__name__}: {str(e)}", "traceback": traceback.format_exc()}
