@@ -26,6 +26,8 @@ class VertexWrapper:
         b64_creds = os.getenv("GCP_CREDENTIALS_JSON_B64")
         if b64_creds:
             try:
+                # Remove any whitespace that might have crept in
+                b64_creds = b64_creds.strip()
                 creds_json = base64.b64decode(b64_creds).decode('utf-8')
                 creds_dict = json.loads(creds_json)
                 
@@ -54,35 +56,42 @@ class VertexWrapper:
                 print(f"Failed to load credentials from Base64: {e}")
 
         # Try local file
-        local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'gcp-credentials.json')
-        if os.path.exists(local_path):
-            try:
-                with open(local_path, 'r') as f:
-                    creds_dict = json.load(f)
+        # Check standard locations including current dir and up one level
+        possible_paths = [
+             os.path.join(os.path.dirname(os.path.dirname(__file__)), 'gcp-credentials.json'),
+             'gcp-credentials.json'
+        ]
 
-                # Check credential type
-                cred_type = creds_dict.get('type')
-                
-                if cred_type == 'service_account':
-                    self.credentials = service_account.Credentials.from_service_account_file(
-                        local_path,
-                        scopes=['https://www.googleapis.com/auth/cloud-platform']
-                    )
-                    if not self.project_id:
-                        self.project_id = creds_dict.get('project_id')
-                
-                elif cred_type == 'authorized_user':
-                    # For file based authorized user, we need to load differently or reuse the dict logic
-                    self.credentials = authorized_user_credentials.Credentials.from_authorized_user_info(
-                        creds_dict,
-                        scopes=['https://www.googleapis.com/auth/cloud-platform']
-                    )
-                    if not self.project_id:
-                        self.project_id = creds_dict.get('quota_project_id')
-                
-                return
-            except Exception as e:
-                print(f"Failed to load credentials from file: {e}")
+        for local_path in possible_paths:
+            if os.path.exists(local_path):
+                try:
+                    with open(local_path, 'r') as f:
+                        creds_dict = json.load(f)
+
+                    # Check credential type
+                    cred_type = creds_dict.get('type')
+                    
+                    if cred_type == 'service_account':
+                        self.credentials = service_account.Credentials.from_service_account_file(
+                            local_path,
+                            scopes=['https://www.googleapis.com/auth/cloud-platform']
+                        )
+                        if not self.project_id:
+                            self.project_id = creds_dict.get('project_id')
+                    
+                    elif cred_type == 'authorized_user':
+                        # For file based authorized user, we need to load differently or reuse the dict logic
+                        self.credentials = authorized_user_credentials.Credentials.from_authorized_user_info(
+                            creds_dict,
+                            scopes=['https://www.googleapis.com/auth/cloud-platform']
+                        )
+                        if not self.project_id:
+                            self.project_id = creds_dict.get('quota_project_id')
+                    
+                    return
+                except Exception as e:
+                    print(f"Failed to load credentials from file {local_path}: {e}")
+
 
     def generate_content(self, prompt: str) -> Optional[str]:
         """Generate content using Vertex AI REST API"""
