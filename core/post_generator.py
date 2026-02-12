@@ -261,13 +261,22 @@ Generate the post text, then provide hashtags separately."""
             print(f"Standard Gemini failed ({e}), trying fallbacks...")
 
         # 2. Try Vertex AI (Enterprise API - Bypasses Geo Block)
+        vertex_error = ""
         if self.vertex and self.vertex.credentials:
-            print("Attempting generation via Vertex AI...")
-            vertex_response = self.vertex.generate_content(prompt)
-            if vertex_response:
-                return vertex_response
-            else:
-                print("Vertex AI returned no content.")
+            try:
+                print("Attempting generation via Vertex AI...")
+                vertex_response = self.vertex.generate_content(prompt)
+                if vertex_response:
+                    return vertex_response
+                else:
+                    vertex_error = "Vertex AI returned empty response"
+                    print(vertex_error)
+            except Exception as ve:
+                vertex_error = str(ve)
+                print(f"Vertex AI exception: {vertex_error}")
+        else:
+            vertex_error = f"Vertex not available (vertex={self.vertex is not None}, creds={self.vertex.credentials is not None if self.vertex else 'N/A'})"
+            print(vertex_error)
         
         # 3. Fallback to OpenAI
         if self.openai_client:
@@ -275,7 +284,7 @@ Generate the post text, then provide hashtags separately."""
             return self._generate_gpt4(prompt)
             
         # If we got here, everything failed
-        raise Exception(f"All AI providers failed. Last error: {error_msg}")
+        raise Exception(f"All AI providers failed. Gemini error: {error_msg} | Vertex error: {vertex_error}")
     
     def _parse_response(self, text: str) -> Dict:
         """Parse AI response into structured format"""
