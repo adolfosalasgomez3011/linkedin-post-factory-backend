@@ -11,6 +11,10 @@ from typing import Dict, List, Optional
 import anthropic
 import openai
 from google import generativeai as genai
+try:
+    from core.vertex_wrapper import VertexWrapper
+except ImportError:
+    VertexWrapper = None
 
 class PostGenerator:
     def __init__(self, config_path="config.json"):
@@ -27,6 +31,13 @@ class PostGenerator:
         """Initialize AI provider clients"""
         # Gemini (Google) - Primary provider (1.5 Flash - most stable)
         google_key = os.getenv("GOOGLE_API_KEY")
+        
+        # Initialize Vertex AI Wrapper (for Enterprise/Cloud usage without geo-blocking)
+        if VertexWrapper:
+            self.vertex = VertexWrapper() # Auto-detects credentials
+        else:
+            self.vertex = None
+            
         if google_key:
             # Force REST transport to avoid gRPC geo-blocking issues on cloud servers
             try:
@@ -238,17 +249,33 @@ Generate the post text, then provide hashtags separately."""
     
     def _generate_gemini(self, prompt: str) -> str:
         """Generate using Gemini (Google)"""
+        error_msg = ""
+        
+        # 1. Try Standard Gemini (Consumer API)
         try:
-            if not self.gemini:
-                raise ValueError("Gemini client not initialized")
-            response = self.gemini.generate_content(prompt)
-            return response.text
+            if self.gemini:
+                response = self.gemini.generate_content(prompt)
+                return response.text
         except Exception as e:
-            # Fallback to OpenAI if Gemini fails (e.g. geo-blocking)
-            if self.openai_client:
-                print(f"Gemini failed ({e}), falling back to OpenAI...")
-                return self._generate_gpt4(prompt)
-            raise e
+            error_msg = str(e)
+            print(f"Standard Gemini failed ({e}), trying fallbacks...")
+
+        # 2. Try Vertex AI (Enterprise API - Bypasses Geo Block)
+        if self.vertex and self.vertex.credentials:
+            print("Attempting generation via Vertex AI...")
+            vertex_response = self.vertex.generate_content(prompt)
+            if vertex_response:
+                return vertex_response
+            else:
+                print("Vertex AI returned no content.")
+        
+        # 3. Fallback to OpenAI
+        if self.openai_client:
+            print(f"All Gemini methods failed. Falling back to OpenAI...")
+            return self._generate_gpt4(prompt)
+            
+        # If we got here, everything failed
+        raise Exception(f"All AI providers failed. Last error: {error_msg}")
     
     def _parse_response(self, text: str) -> Dict:
         """Parse AI response into structured format"""
