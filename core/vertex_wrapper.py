@@ -16,7 +16,7 @@ class VertexWrapper:
         self.project_id = project_id
         self.location = location
         self.credentials = None
-        self.model_name = "gemini-1.5-flash-001" # Vertex specific version name
+        self.model_name = "gemini-2.5-flash" # Current Vertex AI model
         
         self._init_credentials()
 
