@@ -403,8 +403,8 @@ class MediaGenerator:
         c.setFillColorRGB(*color_scheme["bg"])
         c.rect(0, 0, width, height, fill=1)
         
-        # Cover title - create short summary (intelligently condensed)
-        cover_title = self._create_summary_title(title, max_chars=70)
+        # Cover title - use directly if short enough, only summarize if too long
+        cover_title = title if len(title) <= 70 else self._create_summary_title(title, max_chars=70)
         
         c.setFillColorRGB(*color_scheme["accent"])
         c.setFont("Helvetica-Bold", 36)
@@ -420,10 +420,38 @@ class MediaGenerator:
             c.drawString(x_pos, y_pos, line)
             y_pos -= 45
         
-        # Add Spanish translation if bilingual
+        # Pre-translate all titles in a SINGLE API call (instead of per-slide)
+        slide_titles_es = {}
+        cover_title_es = ""
         if is_bilingual_carousel:
-            # Translate the ENGLISH cover title
-            cover_title_es = self._translate_to_spanish(cover_title)
+            all_titles_to_translate = [cover_title]
+            for idx, slide in enumerate(slides):
+                t = slide.get('title', '')
+                if t and not t.startswith('Key Point'):
+                    all_titles_to_translate.append(t)
+            
+            try:
+                batch_prompt = "Translate each line below from English to Spanish. Return ONLY the translations, one per line, in the same order:\n" + "\n".join(all_titles_to_translate)
+                batch_result = self._call_gemini(batch_prompt)
+                translated_lines = [line.strip() for line in batch_result.strip().split('\n') if line.strip()]
+                
+                # First translation is the cover title
+                cover_title_es = translated_lines[0] if translated_lines else cover_title
+                
+                # Rest are slide titles
+                title_idx = 1
+                for idx, slide in enumerate(slides):
+                    t = slide.get('title', '')
+                    if t and not t.startswith('Key Point') and title_idx < len(translated_lines):
+                        slide_titles_es[idx] = translated_lines[title_idx]
+                        title_idx += 1
+                print(f"DEBUG: Batch-translated {len(all_titles_to_translate)} titles in 1 API call")
+            except Exception as e:
+                print(f"Batch translation failed: {e}")
+                cover_title_es = cover_title  # Fallback: use English
+
+        # Draw cover Spanish title if bilingual
+        if is_bilingual_carousel and cover_title_es:
             
             c.setFillColorRGB(*color_scheme["secondary"])
             c.setFont("Helvetica-Oblique", 18)
@@ -466,7 +494,6 @@ class MediaGenerator:
                 c.drawString(x_pos_es, y_pos, cover_title_es)
                 y_pos -= 28
         
-        # Generate cover image using Gemini
         # Generate cover image using themed gradient (fast, no API call to avoid timeout)
         try:
             cover_img = self._generate_cover_gradient(style, int(width * 0.85), int(height * 0.38))
@@ -507,11 +534,11 @@ class MediaGenerator:
             is_bilingual = bool(content_en and content_es)
             
             if not slide_title or slide_title.startswith('Key Point'):
-                # Create title from content (no arbitrary word limit)
+                # Create title from content only if no title provided
                 content_preview = content_en or slide.get('content', '')
                 slide_title = self._create_summary_title(content_preview, max_chars=65)
-            else:
-                # Condense existing title if too long (no word limit, use character limit)
+            elif len(slide_title) > 65:
+                # Only condense if actually too long (skip API call for short titles)
                 slide_title = self._create_summary_title(slide_title, max_chars=65)
             
             # English title with intelligent wrapping
@@ -549,10 +576,9 @@ class MediaGenerator:
                 c.drawString(title_x, title_y, line)
                 title_y -= 26
             
-            # Spanish translation if bilingual (TRANSLATE the English title)
+            # Spanish translation if bilingual (use batch-translated title)
             if is_bilingual:
-                # Translate the English title to Spanish
-                slide_title_es = self._translate_to_spanish(slide_title)
+                slide_title_es = slide_titles_es.get(idx, slide_title)  # Fallback to English
                 
                 c.setFillColorRGB(*color_scheme["secondary"])
                 c.setFont("Helvetica-Oblique", 14)
@@ -591,8 +617,8 @@ class MediaGenerator:
             
             # If bilingual content exists
             if content_en and content_es:
-                # Translate English content to proper Spanish using Gemini
-                content_es_translated = self._translate_to_spanish(content_en)
+                # Use provided Spanish content directly (already translated by post generator)
+                content_es_translated = content_es
                 
                 # Ensure content ends with period
                 if content_en and not content_en.endswith(('.', '!', '?')):
