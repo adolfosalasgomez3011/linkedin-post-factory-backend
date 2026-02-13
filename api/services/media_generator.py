@@ -467,24 +467,9 @@ class MediaGenerator:
                 y_pos -= 28
         
         # Generate cover image using Gemini
+        # Generate cover image using themed gradient (fast, no API call to avoid timeout)
         try:
-            # Include style in prompt for consistent imagery
-            style_descriptors = {
-                'professional': 'clean, modern, professional business',
-                'relaxed': 'warm, natural, organic',
-                'corporate': 'sleek, corporate, executive',
-                'creative': 'vibrant, artistic, creative',
-                'minimal': 'minimalist, simple, clean'
-            }
-            style_desc = style_descriptors.get(style, 'professional')
-            cover_prompt = f"Photorealistic, {style_desc} image representing: {cover_title}. High quality, 16:9 aspect ratio."
-            cover_img_bytes = self.generate_realistic_image(cover_prompt)
-            cover_img = Image.open(io.BytesIO(cover_img_bytes))
-            
-            # Size for cover (50% of page)
-            cover_height = height * 0.4
-            cover_width = width * 0.8
-            cover_img.thumbnail((int(cover_width), int(cover_height)), Image.Resampling.LANCZOS)
+            cover_img = self._generate_cover_gradient(style, int(width * 0.85), int(height * 0.38))
             
             cover_buffer = io.BytesIO()
             cover_img.save(cover_buffer, format='PNG')
@@ -1124,6 +1109,93 @@ Condensed title:"""
         overlay_draw.line(
             [(int(width * 0.15), line_y), (int(width * 0.85), line_y)],
             fill=(*accent, 20), width=1
+        )
+        
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        return img
+
+    def _generate_cover_gradient(self, style: str, width: int, height: int) -> Image.Image:
+        """Generate a premium cover gradient image with more visual richness than slide gradients"""
+        import random, math
+        
+        # Richer gradient palettes for covers (primary, secondary, highlight, accent)
+        palettes = {
+            "professional": ((8, 15, 40), (20, 60, 130), (45, 100, 200), (74, 158, 255)),
+            "relaxed": ((200, 215, 195), (160, 195, 170), (120, 180, 140), (80, 160, 100)),
+            "corporate": ((5, 10, 25), (15, 35, 80), (25, 60, 120), (0, 100, 180)),
+            "creative": ((30, 5, 45), (65, 15, 85), (120, 30, 130), (230, 80, 160)),
+            "minimal": ((245, 245, 250), (230, 232, 240), (210, 215, 228), (120, 125, 145)),
+        }
+        
+        p1, p2, p3, accent = palettes.get(style, palettes["professional"])
+        
+        # Create multi-stop vertical gradient (fast line-based)
+        img = Image.new('RGB', (width, height), p1)
+        draw = ImageDraw.Draw(img)
+        
+        for y in range(height):
+            factor = y / height
+            if factor < 0.5:
+                t = factor * 2
+                r = int(p1[0] + (p2[0] - p1[0]) * t)
+                g = int(p1[1] + (p2[1] - p1[1]) * t)
+                b = int(p1[2] + (p2[2] - p1[2]) * t)
+            else:
+                t = (factor - 0.5) * 2
+                r = int(p2[0] + (p3[0] - p2[0]) * t)
+                g = int(p2[1] + (p3[1] - p2[1]) * t)
+                b = int(p2[2] + (p3[2] - p2[2]) * t)
+            draw.line([(0, y), (width, y)], fill=(min(255, r), min(255, g), min(255, b)))
+        
+        # Apply slight blur for smoothness
+        img = img.filter(ImageFilter.GaussianBlur(radius=2))
+        
+        # Rich overlay with geometric design
+        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        
+        # Grid of subtle dots
+        dot_spacing = 40
+        for x in range(0, width, dot_spacing):
+            for y in range(0, height, dot_spacing):
+                overlay_draw.ellipse(
+                    [(x - 1, y - 1), (x + 1, y + 1)],
+                    fill=(255, 255, 255, 8)
+                )
+        
+        # Flowing curves
+        random.seed(hash(style) + 42)
+        for curve_idx in range(3):
+            points = []
+            base_y = height * (0.25 + curve_idx * 0.25)
+            for x in range(0, width, 4):
+                y_offset = math.sin(x / 80 + curve_idx * 2) * 30 + math.cos(x / 120) * 15
+                points.append((x, int(base_y + y_offset)))
+            if len(points) > 1:
+                overlay_draw.line(points, fill=(*accent, 18), width=2)
+        
+        # Large accent circles (glass-like)
+        for _ in range(5):
+            cx = random.randint(0, width)
+            cy = random.randint(0, height)
+            radius = random.randint(40, 120)
+            overlay_draw.ellipse(
+                [(cx - radius, cy - radius), (cx + radius, cy + radius)],
+                outline=(*accent, 15), width=2
+            )
+            # Inner ring
+            inner_r = int(radius * 0.7)
+            overlay_draw.ellipse(
+                [(cx - inner_r, cy - inner_r), (cx + inner_r, cy + inner_r)],
+                outline=(255, 255, 255, 8), width=1
+            )
+        
+        # Bottom accent bar
+        bar_height = 4
+        overlay_draw.rectangle(
+            [(int(width * 0.1), height - bar_height - 10),
+             (int(width * 0.9), height - 10)],
+            fill=(*accent, 40)
         )
         
         img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')

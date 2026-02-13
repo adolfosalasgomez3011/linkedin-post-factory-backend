@@ -40,3 +40,10 @@ Thumbs.db
 data/generated/
 post-app/GeminiImages/
 post-app/GeneratedCarousels/
+
+# Credential docs (may contain secrets)
+RENDER_SETUP_CREDENTIALS.md
+
+# Test artifacts
+test_*.png
+test_*.py
