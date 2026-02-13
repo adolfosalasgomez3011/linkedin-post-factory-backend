@@ -579,29 +579,9 @@ class MediaGenerator:
             # Calculate image start position after title
             image_start_y = title_y - 15
             
-            # Generate and insert AI image (40% of page height, centered)
+            # Generate styled gradient image matching carousel theme (fast, no API call)
             try:
-                # Create detailed image prompt matching carousel style
-                style_descriptors = {
-                    'professional': 'clean, modern, professional business aesthetic',
-                    'relaxed': 'warm, natural, organic feeling',
-                    'corporate': 'sleek, corporate, executive style',
-                    'creative': 'vibrant, artistic, bold creative',
-                    'minimal': 'minimalist, simple, clean design'
-                }
-                style_desc = style_descriptors.get(style, 'professional')
-                content_preview = (content_en or slide.get('content', ''))[:100]
-                image_prompt = f"Photorealistic, {style_desc}, high-quality image about: {slide_title}. Context: {content_preview}. 16:9 aspect ratio."
-                img_bytes = self.generate_realistic_image(image_prompt)
-                
-                img = Image.open(io.BytesIO(img_bytes))
-                
-                # Calculate dimensions (30% of page height for better spacing)
-                img_height = height * 0.28
-                img_width = width * 0.65
-                
-                # Resize image to fit
-                img.thumbnail((int(img_width), int(img_height)), Image.Resampling.LANCZOS)
+                img = self._generate_themed_gradient(style, int(width * 0.65), int(height * 0.28))
                 
                 # Save to temp buffer
                 img_buffer = io.BytesIO()
@@ -617,7 +597,7 @@ class MediaGenerator:
                 
                 content_start_y = img_y - 50
             except Exception as e:
-                print(f"Image generation failed: {e}")
+                print(f"Slide image generation failed: {e}")
                 content_start_y = height - 200
             
             # Get content
@@ -1094,6 +1074,61 @@ Condensed title:"""
         }
         return colors.get(style, (74, 158, 255))
     
+    def _generate_themed_gradient(self, style: str, width: int, height: int) -> Image.Image:
+        """Generate a professional themed gradient image matching carousel style"""
+        import random
+        
+        # Style-specific gradient colors (start_rgb, end_rgb, accent_rgb)
+        gradients = {
+            "professional": ((15, 25, 50), (30, 80, 160), (74, 158, 255)),
+            "relaxed": ((220, 230, 215), (180, 210, 190), (102, 179, 128)),
+            "corporate": ((10, 15, 35), (20, 50, 100), (0, 102, 179)),
+            "creative": ((40, 10, 55), (80, 20, 100), (230, 77, 153)),
+            "minimal": ((240, 240, 245), (220, 225, 235), (100, 100, 120)),
+        }
+        
+        start, end, accent = gradients.get(style, gradients["professional"])
+        
+        # Create gradient
+        img = Image.new('RGB', (width, height), start)
+        draw = ImageDraw.Draw(img)
+        
+        for y in range(height):
+            factor = y / height
+            r = int(start[0] + (end[0] - start[0]) * factor)
+            g = int(start[1] + (end[1] - start[1]) * factor)
+            b = int(start[2] + (end[2] - start[2]) * factor)
+            draw.line([(0, y), (width, y)], fill=(r, g, b))
+        
+        # Add subtle geometric overlay
+        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        
+        # Diagonal lines
+        for i in range(0, width + height, 60):
+            overlay_draw.line([(i - height, 0), (i, height)], fill=(255, 255, 255, 6), width=1)
+        
+        # Accent circles
+        random.seed(hash(style))  # Deterministic per style
+        for _ in range(3):
+            cx = random.randint(int(width * 0.1), int(width * 0.9))
+            cy = random.randint(int(height * 0.1), int(height * 0.9))
+            r = random.randint(30, 80)
+            overlay_draw.ellipse(
+                [(cx - r, cy - r), (cx + r, cy + r)],
+                outline=(*accent, 25), width=2
+            )
+        
+        # Horizontal accent line
+        line_y = height // 2
+        overlay_draw.line(
+            [(int(width * 0.15), line_y), (int(width * 0.85), line_y)],
+            fill=(*accent, 20), width=1
+        )
+        
+        img = Image.alpha_composite(img.convert('RGBA'), overlay).convert('RGB')
+        return img
+
     async def generate_interactive_html(
         self,
         prompt: str,
