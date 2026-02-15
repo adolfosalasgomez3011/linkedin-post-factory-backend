@@ -686,7 +686,7 @@ class MediaGenerator:
         c.save()
         return buffer.getvalue()
     
-    def _call_gemini(self, prompt_text: str) -> str:
+    def _call_gemini(self, prompt_text: str, max_tokens: int = 500) -> str:
         """Call Gemini API with Vertex AI fallback for cloud environments"""
         import json
         
@@ -734,7 +734,7 @@ class MediaGenerator:
         
         data = {
             "contents": [{"role": "user", "parts": [{"text": prompt_text}]}],
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 500}
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": max_tokens}
         }
         
         response = requests.post(
@@ -1247,7 +1247,7 @@ Requirements:
 - Make it fully functional and interactive (buttons work, calcs work, etc.).
 - Do not include markdown formatting (like ```html), just return the raw HTML."""
             
-            html_content = self._call_gemini(system_prompt)
+            html_content = self._call_gemini(system_prompt, max_tokens=8000)
             
             # Clean up markdown if present
             if "```" in html_content:
