@@ -428,14 +428,26 @@ class MediaGenerator:
         
         def _gen_image(key_prompt):
             key, prompt = key_prompt
-            try:
-                img_bytes = self.generate_realistic_image(prompt)
-                return key, Image.open(io.BytesIO(img_bytes))
-            except Exception as e:
-                print(f"  Image '{key}' failed: {e}")
-                return key, None
+            # Retry up to 2 times with backoff for rate-limit (429) errors
+            for attempt in range(3):
+                try:
+                    img_bytes = self.generate_realistic_image(prompt)
+                    return key, Image.open(io.BytesIO(img_bytes))
+                except Exception as e:
+                    err_str = str(e)
+                    if '429' in err_str or 'quota' in err_str.lower():
+                        wait = 2 * (attempt + 1)  # 2s, 4s, 6s
+                        print(f"  Image '{key}' rate-limited, retry {attempt+1} in {wait}s...")
+                        _time.sleep(wait)
+                    else:
+                        print(f"  Image '{key}' failed: {e}")
+                        return key, None
+            print(f"  Image '{key}' failed after 3 attempts (rate-limited)")
+            return key, None
         
-        with ThreadPoolExecutor(max_workers=len(image_prompts)) as executor:
+        # Cap concurrency at 4 to avoid Imagen quota limits (5 req/min default)
+        max_parallel = min(4, len(image_prompts))
+        with ThreadPoolExecutor(max_workers=max_parallel) as executor:
             futures = {executor.submit(_gen_image, (k, p)): k for k, p in image_prompts.items()}
             for future in as_completed(futures):
                 try:
@@ -1094,9 +1106,15 @@ Condensed title:"""
             raise Exception(f"Vertex AI returned {response.status_code}: {error_text}")
                 
         except Exception as e:
+            err_msg = str(e)
+            # Re-raise rate-limit / quota errors so callers can retry
+            if '429' in err_msg or 'quota' in err_msg.lower() or 'RESOURCE_EXHAUSTED' in err_msg:
+                print(f"⚠️ IMAGEN RATE LIMITED — re-raising for retry")
+                raise
+            
             print(f"❌ IMAGEN GENERATION FAILED ❌")
             print(f"   Error type: {type(e).__name__}")
-            print(f"   Error message: {str(e)}")
+            print(f"   Error message: {err_msg}")
             import traceback
             traceback.print_exc()
             print(f"   Falling back to clean gradient placeholder")
