@@ -420,34 +420,55 @@ class MediaGenerator:
             topic = slide_title_raw if slide_title_raw else slide_content[:80]
             image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image for: {topic}. Professional, clean, no text or words in image."
         
-        # Fire all Imagen calls in parallel
-        print(f"DEBUG: Generating {len(image_prompts)} images in parallel via Imagen 3...")
+        # Fire Imagen calls with staggered submissions to avoid quota bursts
+        print(f"DEBUG: Generating {len(image_prompts)} images via Imagen 3 (staggered parallel)...")
         import time as _time
+        import threading
         img_start = _time.time()
         generated_images = {}  # key -> PIL Image
         
+        # Thread-safe rate limiter: ensures minimum gap between API calls
+        _rate_lock = threading.Lock()
+        _last_call_time = [0.0]
+        _MIN_CALL_GAP = 1.2  # seconds between each Imagen API call
+        
         def _gen_image(key_prompt):
             key, prompt = key_prompt
-            # 1 retry with short backoff for rate-limit (429) errors
-            for attempt in range(2):
+            # Rate-limit: wait for minimum gap since last API call
+            with _rate_lock:
+                now = _time.time()
+                earliest = _last_call_time[0] + _MIN_CALL_GAP
+                wait = max(0, earliest - now)
+                _last_call_time[0] = now + wait
+            if wait > 0:
+                _time.sleep(wait)
+            
+            # 2 retries with backoff for rate-limit (429) errors
+            for attempt in range(3):
                 try:
                     img_bytes = self.generate_realistic_image(prompt)
                     return key, Image.open(io.BytesIO(img_bytes))
                 except Exception as e:
                     err_str = str(e)
-                    if ('429' in err_str or 'quota' in err_str.lower()) and attempt == 0:
-                        print(f"  Image '{key}' rate-limited, retry in 1.5s...")
-                        _time.sleep(1.5)
+                    if '429' in err_str or 'quota' in err_str.lower():
+                        backoff = 3.0 * (attempt + 1)  # 3s, 6s, 9s
+                        print(f"  Image '{key}' rate-limited (attempt {attempt+1}/3), retry in {backoff}s...")
+                        _time.sleep(backoff)
                     else:
                         print(f"  Image '{key}' failed: {e}")
                         return key, None
-            print(f"  Image '{key}' failed after retries")
+            print(f"  Image '{key}' failed after 3 attempts (rate-limited)")
             return key, None
         
-        # Cap concurrency at 3 to stay within Imagen quota limits
-        max_parallel = min(3, len(image_prompts))
+        # Use 3 workers but stagger submissions by 1.5s each to prevent bursts
+        items = list(image_prompts.items())
+        max_parallel = min(3, len(items))
         with ThreadPoolExecutor(max_workers=max_parallel) as executor:
-            futures = {executor.submit(_gen_image, (k, p)): k for k, p in image_prompts.items()}
+            futures = {}
+            for i, (k, p) in enumerate(items):
+                if i > 0:
+                    _time.sleep(1.5)  # stagger each submission
+                futures[executor.submit(_gen_image, (k, p))] = k
             for future in as_completed(futures):
                 try:
                     key, img = future.result()
