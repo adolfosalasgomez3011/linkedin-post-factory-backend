@@ -428,25 +428,24 @@ class MediaGenerator:
         
         def _gen_image(key_prompt):
             key, prompt = key_prompt
-            # Retry up to 2 times with backoff for rate-limit (429) errors
-            for attempt in range(3):
+            # 1 retry with short backoff for rate-limit (429) errors
+            for attempt in range(2):
                 try:
                     img_bytes = self.generate_realistic_image(prompt)
                     return key, Image.open(io.BytesIO(img_bytes))
                 except Exception as e:
                     err_str = str(e)
-                    if '429' in err_str or 'quota' in err_str.lower():
-                        wait = 2 * (attempt + 1)  # 2s, 4s, 6s
-                        print(f"  Image '{key}' rate-limited, retry {attempt+1} in {wait}s...")
-                        _time.sleep(wait)
+                    if ('429' in err_str or 'quota' in err_str.lower()) and attempt == 0:
+                        print(f"  Image '{key}' rate-limited, retry in 1.5s...")
+                        _time.sleep(1.5)
                     else:
                         print(f"  Image '{key}' failed: {e}")
                         return key, None
-            print(f"  Image '{key}' failed after 3 attempts (rate-limited)")
+            print(f"  Image '{key}' failed after retries")
             return key, None
         
-        # Cap concurrency at 4 to avoid Imagen quota limits (5 req/min default)
-        max_parallel = min(4, len(image_prompts))
+        # Cap concurrency at 3 to stay within Imagen quota limits
+        max_parallel = min(3, len(image_prompts))
         with ThreadPoolExecutor(max_workers=max_parallel) as executor:
             futures = {executor.submit(_gen_image, (k, p)): k for k, p in image_prompts.items()}
             for future in as_completed(futures):
