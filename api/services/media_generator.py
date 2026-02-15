@@ -4,6 +4,7 @@ Generates stunning visual assets for LinkedIn posts
 """
 import io
 import base64
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import matplotlib
@@ -395,6 +396,62 @@ class MediaGenerator:
         # Check if carousel is bilingual by looking at first slide
         is_bilingual_carousel = len(slides) > 0 and bool(slides[0].get('content_en') and slides[0].get('content_es'))
         
+        # ====================================================================
+        # PHASE 1: Generate ALL images in PARALLEL (before PDF assembly)
+        # This avoids Render's 30s timeout by running Imagen calls concurrently
+        # ====================================================================
+        style_descriptors = {
+            'professional': 'clean, modern, professional business',
+            'relaxed': 'warm, natural, organic',
+            'corporate': 'sleek, corporate, executive',
+            'creative': 'vibrant, artistic, creative',
+            'minimal': 'minimalist, simple, clean'
+        }
+        style_desc = style_descriptors.get(style, 'professional')
+        
+        # Build prompts: index 0 = cover, index 1..N = slides
+        image_prompts = {}
+        cover_title_for_prompt = title if len(title) <= 70 else title[:70]
+        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality image representing: {cover_title_for_prompt}. 16:9 aspect ratio, no text or words in image."
+        
+        for idx, slide in enumerate(slides):
+            slide_content = slide.get('content_en', '') or slide.get('content', '')
+            slide_title_raw = slide.get('title', '')
+            topic = slide_title_raw if slide_title_raw else slide_content[:80]
+            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image for: {topic}. Professional, clean, no text or words in image."
+        
+        # Fire all Imagen calls in parallel
+        print(f"DEBUG: Generating {len(image_prompts)} images in parallel via Imagen 3...")
+        import time as _time
+        img_start = _time.time()
+        generated_images = {}  # key -> PIL Image
+        
+        def _gen_image(key_prompt):
+            key, prompt = key_prompt
+            try:
+                img_bytes = self.generate_realistic_image(prompt)
+                return key, Image.open(io.BytesIO(img_bytes))
+            except Exception as e:
+                print(f"  Image '{key}' failed: {e}")
+                return key, None
+        
+        with ThreadPoolExecutor(max_workers=len(image_prompts)) as executor:
+            futures = {executor.submit(_gen_image, (k, p)): k for k, p in image_prompts.items()}
+            for future in as_completed(futures):
+                try:
+                    key, img = future.result()
+                    if img:
+                        generated_images[key] = img
+                except Exception as e:
+                    print(f"  Image future error: {e}")
+        
+        img_elapsed = _time.time() - img_start
+        print(f"DEBUG: {len(generated_images)}/{len(image_prompts)} images generated in {img_elapsed:.1f}s")
+        
+        # ====================================================================
+        # PHASE 2: Batch-translate titles in a single API call
+        # ====================================================================
+        
         buffer = io.BytesIO()
         c = canvas.Canvas(buffer, pagesize=letter)
         width, height = letter
@@ -494,9 +551,17 @@ class MediaGenerator:
                 c.drawString(x_pos_es, y_pos, cover_title_es)
                 y_pos -= 28
         
-        # Generate cover image using themed gradient (fast, no API call to avoid timeout)
+        # Generate cover image using pre-generated AI image
         try:
-            cover_img = self._generate_cover_gradient(style, int(width * 0.85), int(height * 0.38))
+            cover_img = generated_images.get('cover')
+            if not cover_img:
+                # Fallback to gradient if Imagen failed for cover
+                cover_img = self._generate_cover_gradient(style, int(width * 0.85), int(height * 0.38))
+            
+            # Size for cover (fit within page)
+            cover_max_h = height * 0.4
+            cover_max_w = width * 0.85
+            cover_img.thumbnail((int(cover_max_w), int(cover_max_h)), Image.Resampling.LANCZOS)
             
             cover_buffer = io.BytesIO()
             cover_img.save(cover_buffer, format='PNG')
@@ -590,21 +655,27 @@ class MediaGenerator:
             # Calculate image start position after title
             image_start_y = title_y - 15
             
-            # Generate styled gradient image matching carousel theme (fast, no API call)
+            # Use pre-generated AI image for this slide
             try:
-                img = self._generate_themed_gradient(style, int(width * 0.65), int(height * 0.28))
+                slide_img = generated_images.get(f'slide_{idx}')
+                if not slide_img:
+                    # Fallback to gradient if Imagen failed for this slide
+                    slide_img = self._generate_themed_gradient(style, int(width * 0.65), int(height * 0.28))
+                else:
+                    # Resize AI image to fit slide area
+                    slide_img.thumbnail((int(width * 0.65), int(height * 0.28)), Image.Resampling.LANCZOS)
                 
                 # Save to temp buffer
                 img_buffer = io.BytesIO()
-                img.save(img_buffer, format='PNG')
+                slide_img.save(img_buffer, format='PNG')
                 img_buffer.seek(0)
                 
                 # Position image centered below title
-                img_x = (width - img.width) / 2
-                img_y = image_start_y - img.height
+                img_x = (width - slide_img.width) / 2
+                img_y = image_start_y - slide_img.height
                 
                 c.drawImage(ImageReader(img_buffer), img_x, img_y, 
-                           width=img.width, height=img.height, mask='auto')
+                           width=slide_img.width, height=slide_img.height, mask='auto')
                 
                 content_start_y = img_y - 50
             except Exception as e:
