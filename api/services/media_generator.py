@@ -1236,23 +1236,18 @@ Condensed title:"""
         Generate a self-contained interactive HTML file using AI
         """
         try:
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            system_prompt = f"""Create a single-file, self-contained HTML/JS/CSS interactive component.
+Topic: {title}
+Description of functionality: {prompt}
+
+Requirements:
+- Must be a single HTML file with embedded CSS and JS.
+- Design: Modern, professional, clean (like Stripe or Linear docs).
+- Use Tailwind CSS (include via CDN: <script src="https://cdn.tailwindcss.com"></script>).
+- Make it fully functional and interactive (buttons work, calcs work, etc.).
+- Do not include markdown formatting (like ```html), just return the raw HTML."""
             
-            system_prompt = f"""
-            Create a single-file, self-contained HTML/JS/CSS interactive component.
-            Topic: {title}
-            Description of functionality: {prompt}
-            
-            Requirements:
-            - Must be a single HTML file with embedded CSS and JS.
-            - Design: Modern, professional, clean (like Stripe or Linear docs).
-            - Use Tailwind CSS (include via CDN: <script src="https://cdn.tailwindcss.com"></script>).
-            - Make it fully functional and interactive (buttons work, calcs work, etc.).
-            - Do not include markdown formatting (like ```html), just return the raw HTML.
-            """
-            
-            response = model.generate_content(system_prompt)
-            html_content = response.text
+            html_content = self._call_gemini(system_prompt)
             
             # Clean up markdown if present
             if "```" in html_content:
