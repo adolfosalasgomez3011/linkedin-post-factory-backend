@@ -409,6 +409,16 @@ class MediaGenerator:
         }
         style_desc = style_descriptors.get(style, 'professional')
         
+        # Color/tone guidance so images melt with slide backgrounds
+        style_color_tone = {
+            'professional': 'dark navy and deep blue tones, cool shadows, subtle blue highlights, low-key moody lighting',
+            'relaxed': 'warm earth tones, golden hour lighting, amber and brown hues, soft warm glow',
+            'corporate': 'cool grey and silver tones, sharp contrast, steel blue accents, polished executive lighting',
+            'creative': 'rich purple and magenta tones, dramatic colorful lighting, vibrant pink and violet hues',
+            'minimal': 'high-key bright whites and soft greys, clean even lighting, muted neutral palette'
+        }
+        color_tone = style_color_tone.get(style, style_color_tone['professional'])
+        
         # Build prompts for ALL images: cover + every slide
         # CRITICAL: Do NOT pass title text to Imagen — it renders it as visible text in the image.
         # Instead, use Gemini to convert titles into pure visual scene descriptions.
@@ -425,6 +435,7 @@ class MediaGenerator:
             scene_prompt = (
                 "For each numbered topic below, write a SHORT (15-20 words max) description of a photographic scene "
                 "that visually represents the concept. Rules:\n"
+                f"- The scene must use this color palette and mood: {color_tone}.\n"
                 "- Describe ONLY physical objects, people, settings, colors, and lighting.\n"
                 "- NEVER mention screens, monitors, whiteboards, signs, books, papers, posters, blackboards, displays, or any surface that could show text.\n"
                 "- NEVER include any words, titles, labels, or text references.\n"
@@ -451,12 +462,12 @@ class MediaGenerator:
         
         # Build cover prompt
         cover_scene = scene_descriptions.get(1, "a modern professional workspace with natural lighting and clean desk")
-        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality photograph: {cover_scene}. 16:9 aspect ratio. {no_text_instruction}"
+        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality photograph: {cover_scene}. Color mood: {color_tone}. 16:9 aspect ratio. {no_text_instruction}"
         
         # Build slide prompts
         for idx, slide in enumerate(slides):
             slide_scene = scene_descriptions.get(idx + 2, "a professional business environment with modern technology and warm lighting")
-            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality photograph: {slide_scene}. {no_text_instruction}"
+            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality photograph: {slide_scene}. Color mood: {color_tone}. {no_text_instruction}"
         
         # Generate ALL images in parallel using 2 concurrent workers
         # 2 workers avoids Google Imagen per-second burst limits while
