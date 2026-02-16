@@ -412,13 +412,14 @@ class MediaGenerator:
         # Build prompts for ALL images: cover + every slide
         image_prompts = {}
         cover_title_for_prompt = title if len(title) <= 70 else title[:70]
-        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality image representing: {cover_title_for_prompt}. 16:9 aspect ratio, no text or words in image."
+        no_text_instruction = "ABSOLUTELY NO text, NO letters, NO words, NO numbers, NO typography, NO captions, NO labels, NO watermarks anywhere in the image. Pure visual only."
+        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality image visually representing the concept of: {cover_title_for_prompt}. 16:9 aspect ratio. {no_text_instruction}"
         
         for idx, slide in enumerate(slides):
             slide_content = slide.get('content_en', '') or slide.get('content', '')
             slide_title_raw = slide.get('title', '')
             topic = slide_title_raw if slide_title_raw else slide_content[:80]
-            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image for: {topic}. Professional, clean, no text or words in image."
+            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image visually representing the concept of: {topic}. {no_text_instruction}"
         
         # Generate ALL images in parallel using 2 concurrent workers
         # 2 workers avoids Google Imagen per-second burst limits while
@@ -523,29 +524,55 @@ class MediaGenerator:
                 batch_result = self._call_gemini(batch_prompt)
                 
                 # Parse numbered responses robustly
+                print(f"DEBUG: Raw Gemini translation response: {repr(batch_result[:500])}")
                 for line in batch_result.strip().split('\n'):
                     line = line.strip()
+                    # Strip markdown bold formatting (**text**)
+                    line = _re.sub(r'\*\*', '', line)
                     if not line:
                         continue
-                    match = _re.match(r'(\d+)\.\s*(.+)', line)
+                    match = _re.match(r'(\d+)[\.\)\-]\s*(.+)', line)
                     if match:
                         line_num = int(match.group(1))
                         translation = match.group(2).strip()
+                        # Remove any quotes Gemini might add
+                        translation = translation.strip('"\'\'\u201c\u201d')
                         key = title_key_map.get(line_num)
                         if key == 'cover':
                             cover_title_es = translation
+                            print(f"DEBUG: Cover title ES = {translation}")
                         elif key is not None:  # slide index
                             slide_titles_es[key] = translation
+                            print(f"DEBUG: Slide {key} title ES = {translation}")
                 
                 # Fallback: if cover wasn't parsed, use English
                 if not cover_title_es:
                     cover_title_es = cover_title
                 
-                print(f"DEBUG: Batch-translated {len(slide_titles_es) + (1 if cover_title_es != cover_title else 0)} titles in 1 API call")
-                print(f"DEBUG: slide_titles_es keys = {list(slide_titles_es.keys())}")
+                # Fallback: translate any missing slide titles individually
+                for idx, slide in enumerate(slides):
+                    t = slide.get('title', '')
+                    if t and not t.startswith('Key Point') and idx not in slide_titles_es:
+                        try:
+                            individual = self._call_gemini(f"Translate this title from English to Spanish. Return ONLY the Spanish translation, nothing else: {t}")
+                            slide_titles_es[idx] = individual.strip().strip('"\'\'\u201c\u201d')
+                            print(f"DEBUG: Slide {idx} individually translated: {slide_titles_es[idx]}")
+                        except:
+                            slide_titles_es[idx] = t  # Last resort: English
+                
+                print(f"DEBUG: Batch-translated titles. slide_titles_es = {slide_titles_es}")
             except Exception as e:
                 print(f"Batch translation failed: {e}")
                 cover_title_es = cover_title  # Fallback: use English
+                # Even if batch fails, try translating individually
+                for idx, slide in enumerate(slides):
+                    t = slide.get('title', '')
+                    if t and not t.startswith('Key Point'):
+                        try:
+                            individual = self._call_gemini(f"Translate this title from English to Spanish. Return ONLY the Spanish translation, nothing else: {t}")
+                            slide_titles_es[idx] = individual.strip().strip('"\'\'\u201c\u201d')
+                        except:
+                            slide_titles_es[idx] = t
 
         # Draw cover Spanish title if bilingual
         if is_bilingual_carousel and cover_title_es:
