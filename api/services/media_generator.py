@@ -422,7 +422,7 @@ class MediaGenerator:
         
         # Generate ALL images in parallel using 2 concurrent workers
         # 2 workers avoids Google Imagen per-second burst limits while
-        # keeping total time manageable (7 images ≈ 4 rounds × 10s = 40s)
+        # Process in explicit batches of 2 with delays to avoid QPM quota
         print(f"DEBUG: Generating {len(image_prompts)} photorealistic images via Imagen 3...")
         import time as _time
         img_start = _time.time()
@@ -430,32 +430,45 @@ class MediaGenerator:
         
         def _gen_image(key_prompt):
             key, prompt = key_prompt
-            for attempt in range(2):
+            for attempt in range(3):  # 3 attempts with escalating backoff
                 try:
                     img_bytes = self.generate_realistic_image(prompt)
                     return key, Image.open(io.BytesIO(img_bytes))
                 except Exception as e:
                     err_str = str(e)
-                    if ('429' in err_str or 'quota' in err_str.lower()) and attempt == 0:
-                        print(f"  Image '{key}' rate-limited, retry in 8s...")
-                        _time.sleep(8)
+                    if ('429' in err_str or 'quota' in err_str.lower()) and attempt < 2:
+                        wait = 12 * (attempt + 1)  # 12s, then 24s
+                        print(f"  Image '{key}' rate-limited (attempt {attempt+1}), retry in {wait}s...")
+                        _time.sleep(wait)
                     else:
-                        print(f"  Image '{key}' failed: {e}")
+                        print(f"  Image '{key}' failed after {attempt+1} attempts: {e}")
                         return key, None
             return key, None
         
-        # 2 workers: fires images in pairs with natural ~10s gaps between pairs
-        # This spreads requests evenly and avoids Google's burst quota rejection
+        # Process in EXPLICIT batches of 2 with 5s delays between batches
+        # This guarantees we stay under Google's per-minute quota (5-7 QPM)
         items = list(image_prompts.items())
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = {executor.submit(_gen_image, (k, p)): k for k, p in items}
-            for future in as_completed(futures):
-                try:
-                    key, img = future.result()
-                    if img:
-                        generated_images[key] = img
-                except Exception as e:
-                    print(f"  Image future error: {e}")
+        batch_size = 2
+        for batch_start in range(0, len(items), batch_size):
+            batch = items[batch_start:batch_start + batch_size]
+            batch_num = batch_start // batch_size + 1
+            total_batches = (len(items) + batch_size - 1) // batch_size
+            print(f"  Batch {batch_num}/{total_batches}: generating {len(batch)} images...")
+            
+            with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                futures = {executor.submit(_gen_image, (k, p)): k for k, p in batch}
+                for future in as_completed(futures):
+                    try:
+                        key, img = future.result()
+                        if img:
+                            generated_images[key] = img
+                    except Exception as e:
+                        print(f"  Image future error: {e}")
+            
+            # Wait between batches to let quota refresh
+            if batch_start + batch_size < len(items):
+                print(f"  Waiting 5s between batches for quota refresh...")
+                _time.sleep(5)
         
         img_elapsed = _time.time() - img_start
         print(f"DEBUG: {len(generated_images)}/{len(image_prompts)} images generated in {img_elapsed:.1f}s")
@@ -493,28 +506,52 @@ class MediaGenerator:
         slide_titles_es = {}
         cover_title_es = ""
         if is_bilingual_carousel:
-            all_titles_to_translate = [cover_title]
+            import re as _re
+            # Build numbered list for reliable parsing
+            all_titles_to_translate = []
+            title_key_map = {}  # number -> ('cover' or slide idx)
+            
+            num = 1
+            all_titles_to_translate.append(f"{num}. {cover_title}")
+            title_key_map[num] = 'cover'
+            num += 1
+            
             for idx, slide in enumerate(slides):
                 t = slide.get('title', '')
                 if t and not t.startswith('Key Point'):
-                    all_titles_to_translate.append(t)
+                    all_titles_to_translate.append(f"{num}. {t}")
+                    title_key_map[num] = idx
+                    num += 1
             
             try:
-                batch_prompt = "Translate each line below from English to Spanish. Return ONLY the translations, one per line, in the same order:\n" + "\n".join(all_titles_to_translate)
+                batch_prompt = (
+                    "Translate each numbered line below from English to Spanish. "
+                    "Return ONLY the numbered translations in the EXACT same numbered format.\n"
+                    + "\n".join(all_titles_to_translate)
+                )
                 batch_result = self._call_gemini(batch_prompt)
-                translated_lines = [line.strip() for line in batch_result.strip().split('\n') if line.strip()]
                 
-                # First translation is the cover title
-                cover_title_es = translated_lines[0] if translated_lines else cover_title
+                # Parse numbered responses robustly
+                for line in batch_result.strip().split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    match = _re.match(r'(\d+)\.\s*(.+)', line)
+                    if match:
+                        line_num = int(match.group(1))
+                        translation = match.group(2).strip()
+                        key = title_key_map.get(line_num)
+                        if key == 'cover':
+                            cover_title_es = translation
+                        elif key is not None:  # slide index
+                            slide_titles_es[key] = translation
                 
-                # Rest are slide titles
-                title_idx = 1
-                for idx, slide in enumerate(slides):
-                    t = slide.get('title', '')
-                    if t and not t.startswith('Key Point') and title_idx < len(translated_lines):
-                        slide_titles_es[idx] = translated_lines[title_idx]
-                        title_idx += 1
-                print(f"DEBUG: Batch-translated {len(all_titles_to_translate)} titles in 1 API call")
+                # Fallback: if cover wasn't parsed, use English
+                if not cover_title_es:
+                    cover_title_es = cover_title
+                
+                print(f"DEBUG: Batch-translated {len(slide_titles_es) + (1 if cover_title_es != cover_title else 0)} titles in 1 API call")
+                print(f"DEBUG: slide_titles_es keys = {list(slide_titles_es.keys())}")
             except Exception as e:
                 print(f"Batch translation failed: {e}")
                 cover_title_es = cover_title  # Fallback: use English
