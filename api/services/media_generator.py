@@ -409,24 +409,21 @@ class MediaGenerator:
         }
         style_desc = style_descriptors.get(style, 'professional')
         
-        # Build prompts: index 0 = cover, index 1..N = slides
-        # Limit to max 4 Imagen images (cover + 3 slides) to stay under Render 30s timeout
-        MAX_IMAGEN_IMAGES = 4
+        # Build prompts for ALL images: cover + every slide
         image_prompts = {}
         cover_title_for_prompt = title if len(title) <= 70 else title[:70]
         image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality image representing: {cover_title_for_prompt}. 16:9 aspect ratio, no text or words in image."
         
         for idx, slide in enumerate(slides):
-            if len(image_prompts) >= MAX_IMAGEN_IMAGES:
-                break  # remaining slides will use gradient fallback
             slide_content = slide.get('content_en', '') or slide.get('content', '')
             slide_title_raw = slide.get('title', '')
             topic = slide_title_raw if slide_title_raw else slide_content[:80]
             image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image for: {topic}. Professional, clean, no text or words in image."
         
-        # Fire ALL Imagen calls simultaneously (max 4 = burst-safe)
-        print(f"DEBUG: Generating {len(image_prompts)} images via Imagen 3 (parallel)...")
-        import time as _time
+        # Generate ALL images in parallel using 2 concurrent workers
+        # 2 workers avoids Google Imagen per-second burst limits while
+        # keeping total time manageable (7 images ≈ 4 rounds × 10s = 40s)
+        print(f"DEBUG: Generating {len(image_prompts)} photorealistic images via Imagen 3...")
         import time as _time
         img_start = _time.time()
         generated_images = {}  # key -> PIL Image
@@ -440,16 +437,17 @@ class MediaGenerator:
                 except Exception as e:
                     err_str = str(e)
                     if ('429' in err_str or 'quota' in err_str.lower()) and attempt == 0:
-                        print(f"  Image '{key}' rate-limited, retry in 3s...")
-                        _time.sleep(3)
+                        print(f"  Image '{key}' rate-limited, retry in 8s...")
+                        _time.sleep(8)
                     else:
                         print(f"  Image '{key}' failed: {e}")
                         return key, None
             return key, None
         
-        # All 4 images fire simultaneously (4 concurrent = burst-safe, proven in testing)
+        # 2 workers: fires images in pairs with natural ~10s gaps between pairs
+        # This spreads requests evenly and avoids Google's burst quota rejection
         items = list(image_prompts.items())
-        with ThreadPoolExecutor(max_workers=len(items)) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
             futures = {executor.submit(_gen_image, (k, p)): k for k, p in items}
             for future in as_completed(futures):
                 try:
