@@ -423,43 +423,38 @@ class MediaGenerator:
         # Fire Imagen calls with staggered submissions to avoid quota bursts
         print(f"DEBUG: Generating {len(image_prompts)} images via Imagen 3...")
         import time as _time
-        import threading
         img_start = _time.time()
         generated_images = {}  # key -> PIL Image
         
         def _gen_image(key_prompt):
             key, prompt = key_prompt
-            try:
-                img_bytes = self.generate_realistic_image(prompt)
-                return key, Image.open(io.BytesIO(img_bytes))
-            except Exception as e:
-                print(f"  Image '{key}' failed: {e}")
-                return key, None
+            for attempt in range(2):
+                try:
+                    img_bytes = self.generate_realistic_image(prompt)
+                    return key, Image.open(io.BytesIO(img_bytes))
+                except Exception as e:
+                    err_str = str(e)
+                    if ('429' in err_str or 'quota' in err_str.lower()) and attempt == 0:
+                        print(f"  Image '{key}' rate-limited, waiting 12s for quota refill...")
+                        _time.sleep(12)
+                    else:
+                        print(f"  Image '{key}' failed: {e}")
+                        return key, None
+            return key, None
         
-        # Split into batches of 4 to stay within Imagen quota (~5-7 QPM)
-        # Batch 1 fires immediately; Batch 2 fires after Batch 1 completes
-        # (by then ~10-12s elapsed, allowing quota tokens to refill)
+        # 3 concurrent workers (proven burst-safe) + 12s retry on 429
+        # Pattern: 3 fire at t=0, 3 at t=10, 1 at t=20 — natural 10s gap between batches
+        # If any hit 429, retry waits 12s (matches Google's quota token refill)
         items = list(image_prompts.items())
-        BATCH_SIZE = 4
-        
-        for batch_start in range(0, len(items), BATCH_SIZE):
-            batch = items[batch_start:batch_start + BATCH_SIZE]
-            batch_num = batch_start // BATCH_SIZE + 1
-            print(f"  Batch {batch_num}: generating {len(batch)} images in parallel...")
-            
-            with ThreadPoolExecutor(max_workers=len(batch)) as executor:
-                futures = {executor.submit(_gen_image, (k, p)): k for k, p in batch}
-                for future in as_completed(futures):
-                    try:
-                        key, img = future.result()
-                        if img:
-                            generated_images[key] = img
-                    except Exception as e:
-                        print(f"  Image future error: {e}")
-            
-            # If more batches remain, brief pause for quota headroom
-            if batch_start + BATCH_SIZE < len(items):
-                _time.sleep(1.0)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(_gen_image, (k, p)): k for k, p in items}
+            for future in as_completed(futures):
+                try:
+                    key, img = future.result()
+                    if img:
+                        generated_images[key] = img
+                except Exception as e:
+                    print(f"  Image future error: {e}")
         
         img_elapsed = _time.time() - img_start
         print(f"DEBUG: {len(generated_images)}/{len(image_prompts)} images generated in {img_elapsed:.1f}s")
