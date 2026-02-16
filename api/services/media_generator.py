@@ -424,8 +424,11 @@ class MediaGenerator:
         try:
             scene_prompt = (
                 "For each numbered topic below, write a SHORT (15-20 words max) description of a photographic scene "
-                "that visually represents the concept. Describe ONLY physical objects, people, settings, and lighting. "
-                "Do NOT include any words, text, labels, or title references in the description. "
+                "that visually represents the concept. Rules:\n"
+                "- Describe ONLY physical objects, people, settings, colors, and lighting.\n"
+                "- NEVER mention screens, monitors, whiteboards, signs, books, papers, posters, blackboards, displays, or any surface that could show text.\n"
+                "- NEVER include any words, titles, labels, or text references.\n"
+                "- Focus on people, hands, tools, nature, architecture, abstract light effects.\n"
                 "Return numbered descriptions in the same format.\n"
                 + "\n".join(f"{i+1}. {t}" for i, t in enumerate(all_topics))
             )
@@ -1164,7 +1167,8 @@ Condensed title:"""
                 "instances": [{"prompt": prompt}],
                 "parameters": {
                     "sampleCount": 1,
-                    "aspectRatio": "16:9"
+                    "aspectRatio": "16:9",
+                    "negativePrompt": "text, letters, words, numbers, typography, captions, labels, signs, watermarks, writing, titles, subtitles, headlines, logos, stamps, whiteboard text, screen text"
                 }
             }
             
