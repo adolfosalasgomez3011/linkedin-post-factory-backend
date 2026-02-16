@@ -410,18 +410,23 @@ class MediaGenerator:
         style_desc = style_descriptors.get(style, 'professional')
         
         # Build prompts: index 0 = cover, index 1..N = slides
+        # Limit to max 4 Imagen images (cover + 3 slides) to stay under Render 30s timeout
+        MAX_IMAGEN_IMAGES = 4
         image_prompts = {}
         cover_title_for_prompt = title if len(title) <= 70 else title[:70]
         image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality image representing: {cover_title_for_prompt}. 16:9 aspect ratio, no text or words in image."
         
         for idx, slide in enumerate(slides):
+            if len(image_prompts) >= MAX_IMAGEN_IMAGES:
+                break  # remaining slides will use gradient fallback
             slide_content = slide.get('content_en', '') or slide.get('content', '')
             slide_title_raw = slide.get('title', '')
             topic = slide_title_raw if slide_title_raw else slide_content[:80]
             image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image for: {topic}. Professional, clean, no text or words in image."
         
-        # Fire Imagen calls with staggered submissions to avoid quota bursts
-        print(f"DEBUG: Generating {len(image_prompts)} images via Imagen 3...")
+        # Fire ALL Imagen calls simultaneously (max 4 = burst-safe)
+        print(f"DEBUG: Generating {len(image_prompts)} images via Imagen 3 (parallel)...")
+        import time as _time
         import time as _time
         img_start = _time.time()
         generated_images = {}  # key -> PIL Image
@@ -435,18 +440,16 @@ class MediaGenerator:
                 except Exception as e:
                     err_str = str(e)
                     if ('429' in err_str or 'quota' in err_str.lower()) and attempt == 0:
-                        print(f"  Image '{key}' rate-limited, waiting 12s for quota refill...")
-                        _time.sleep(12)
+                        print(f"  Image '{key}' rate-limited, retry in 3s...")
+                        _time.sleep(3)
                     else:
                         print(f"  Image '{key}' failed: {e}")
                         return key, None
             return key, None
         
-        # 3 concurrent workers (proven burst-safe) + 12s retry on 429
-        # Pattern: 3 fire at t=0, 3 at t=10, 1 at t=20 — natural 10s gap between batches
-        # If any hit 429, retry waits 12s (matches Google's quota token refill)
+        # All 4 images fire simultaneously (4 concurrent = burst-safe, proven in testing)
         items = list(image_prompts.items())
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=len(items)) as executor:
             futures = {executor.submit(_gen_image, (k, p)): k for k, p in items}
             for future in as_completed(futures):
                 try:
