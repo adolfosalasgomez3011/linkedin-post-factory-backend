@@ -427,51 +427,39 @@ class MediaGenerator:
         img_start = _time.time()
         generated_images = {}  # key -> PIL Image
         
-        # Thread-safe rate limiter: spaces API calls 1.5s apart to avoid quota bursts
-        _rate_lock = threading.Lock()
-        _last_call_time = [img_start]
-        
         def _gen_image(key_prompt):
             key, prompt = key_prompt
-            # Rate-limit: ensure 1.5s gap between each Imagen API call
-            with _rate_lock:
-                now = _time.time()
-                earliest = _last_call_time[0] + 1.5
-                wait = max(0, earliest - now)
-                _last_call_time[0] = now + wait
-            if wait > 0:
-                _time.sleep(wait)
-            
-            # 1 retry with 5s backoff for rate-limit (429) errors
-            for attempt in range(2):
-                try:
-                    img_bytes = self.generate_realistic_image(prompt)
-                    return key, Image.open(io.BytesIO(img_bytes))
-                except Exception as e:
-                    err_str = str(e)
-                    if '429' in err_str or 'quota' in err_str.lower():
-                        if attempt == 0:
-                            print(f"  Image '{key}' rate-limited, retry in 5s...")
-                            _time.sleep(5)
-                        else:
-                            print(f"  Image '{key}' failed after retry: {e}")
-                            return key, None
-                    else:
-                        print(f"  Image '{key}' failed: {e}")
-                        return key, None
-            return key, None
+            try:
+                img_bytes = self.generate_realistic_image(prompt)
+                return key, Image.open(io.BytesIO(img_bytes))
+            except Exception as e:
+                print(f"  Image '{key}' failed: {e}")
+                return key, None
         
-        # All workers launch simultaneously — rate limiter spaces the actual API calls
+        # Split into batches of 4 to stay within Imagen quota (~5-7 QPM)
+        # Batch 1 fires immediately; Batch 2 fires after Batch 1 completes
+        # (by then ~10-12s elapsed, allowing quota tokens to refill)
         items = list(image_prompts.items())
-        with ThreadPoolExecutor(max_workers=len(items)) as executor:
-            futures = {executor.submit(_gen_image, (k, p)): k for k, p in items}
-            for future in as_completed(futures):
-                try:
-                    key, img = future.result()
-                    if img:
-                        generated_images[key] = img
-                except Exception as e:
-                    print(f"  Image future error: {e}")
+        BATCH_SIZE = 4
+        
+        for batch_start in range(0, len(items), BATCH_SIZE):
+            batch = items[batch_start:batch_start + BATCH_SIZE]
+            batch_num = batch_start // BATCH_SIZE + 1
+            print(f"  Batch {batch_num}: generating {len(batch)} images in parallel...")
+            
+            with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+                futures = {executor.submit(_gen_image, (k, p)): k for k, p in batch}
+                for future in as_completed(futures):
+                    try:
+                        key, img = future.result()
+                        if img:
+                            generated_images[key] = img
+                    except Exception as e:
+                        print(f"  Image future error: {e}")
+            
+            # If more batches remain, brief pause for quota headroom
+            if batch_start + BATCH_SIZE < len(items):
+                _time.sleep(1.0)
         
         img_elapsed = _time.time() - img_start
         print(f"DEBUG: {len(generated_images)}/{len(image_prompts)} images generated in {img_elapsed:.1f}s")
