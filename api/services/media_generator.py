@@ -422,53 +422,44 @@ class MediaGenerator:
         
         # Generate ALL images in parallel using 2 concurrent workers
         # 2 workers avoids Google Imagen per-second burst limits while
-        # Process in explicit batches of 2 with delays to avoid QPM quota
-        print(f"DEBUG: Generating {len(image_prompts)} photorealistic images via Imagen 3...")
+        # Generate images SEQUENTIALLY — one at a time with 2s gap
+        # This is the ONLY reliable way to avoid Google Imagen QPM quota:
+        # Each image takes ~10s + 2s gap = 12s between requests = 5 QPM max
+        # Total for 7 images: ~84s (well within Render's 100-min timeout)
+        print(f"DEBUG: Generating {len(image_prompts)} photorealistic images SEQUENTIALLY via Imagen 3...")
         import time as _time
         img_start = _time.time()
         generated_images = {}  # key -> PIL Image
         
-        def _gen_image(key_prompt):
-            key, prompt = key_prompt
+        items = list(image_prompts.items())
+        for img_idx, (key, prompt) in enumerate(items):
+            print(f"  [{img_idx+1}/{len(items)}] Generating '{key}'...")
+            
+            success = False
             for attempt in range(3):  # 3 attempts with escalating backoff
                 try:
                     img_bytes = self.generate_realistic_image(prompt)
-                    return key, Image.open(io.BytesIO(img_bytes))
+                    img = Image.open(io.BytesIO(img_bytes))
+                    generated_images[key] = img
+                    success = True
+                    print(f"  [{img_idx+1}/{len(items)}] ✅ '{key}' generated ({len(img_bytes)} bytes)")
+                    break
                 except Exception as e:
                     err_str = str(e)
                     if ('429' in err_str or 'quota' in err_str.lower()) and attempt < 2:
-                        wait = 12 * (attempt + 1)  # 12s, then 24s
-                        print(f"  Image '{key}' rate-limited (attempt {attempt+1}), retry in {wait}s...")
+                        wait = 15 * (attempt + 1)  # 15s, then 30s
+                        print(f"  [{img_idx+1}/{len(items)}] ⚠️ '{key}' rate-limited (attempt {attempt+1}), retry in {wait}s...")
                         _time.sleep(wait)
                     else:
-                        print(f"  Image '{key}' failed after {attempt+1} attempts: {e}")
-                        return key, None
-            return key, None
-        
-        # Process in EXPLICIT batches of 2 with 5s delays between batches
-        # This guarantees we stay under Google's per-minute quota (5-7 QPM)
-        items = list(image_prompts.items())
-        batch_size = 2
-        for batch_start in range(0, len(items), batch_size):
-            batch = items[batch_start:batch_start + batch_size]
-            batch_num = batch_start // batch_size + 1
-            total_batches = (len(items) + batch_size - 1) // batch_size
-            print(f"  Batch {batch_num}/{total_batches}: generating {len(batch)} images...")
+                        print(f"  [{img_idx+1}/{len(items)}] ❌ '{key}' failed after {attempt+1} attempts: {e}")
+                        break
             
-            with ThreadPoolExecutor(max_workers=batch_size) as executor:
-                futures = {executor.submit(_gen_image, (k, p)): k for k, p in batch}
-                for future in as_completed(futures):
-                    try:
-                        key, img = future.result()
-                        if img:
-                            generated_images[key] = img
-                    except Exception as e:
-                        print(f"  Image future error: {e}")
+            if not success:
+                print(f"  [{img_idx+1}/{len(items)}] '{key}' will use gradient fallback")
             
-            # Wait between batches to let quota refresh
-            if batch_start + batch_size < len(items):
-                print(f"  Waiting 5s between batches for quota refresh...")
-                _time.sleep(5)
+            # 2s delay between images to stay well under QPM limit
+            if img_idx < len(items) - 1:
+                _time.sleep(2)
         
         img_elapsed = _time.time() - img_start
         print(f"DEBUG: {len(generated_images)}/{len(image_prompts)} images generated in {img_elapsed:.1f}s")
