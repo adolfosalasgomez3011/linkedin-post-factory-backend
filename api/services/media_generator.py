@@ -410,16 +410,50 @@ class MediaGenerator:
         style_desc = style_descriptors.get(style, 'professional')
         
         # Build prompts for ALL images: cover + every slide
+        # CRITICAL: Do NOT pass title text to Imagen — it renders it as visible text in the image.
+        # Instead, use Gemini to convert titles into pure visual scene descriptions.
         image_prompts = {}
-        cover_title_for_prompt = title if len(title) <= 70 else title[:70]
-        no_text_instruction = "ABSOLUTELY NO text, NO letters, NO words, NO numbers, NO typography, NO captions, NO labels, NO watermarks anywhere in the image. Pure visual only."
-        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality image visually representing the concept of: {cover_title_for_prompt}. 16:9 aspect ratio. {no_text_instruction}"
+        no_text_instruction = "The image must contain ABSOLUTELY NO text, NO letters, NO words, NO numbers, NO typography, NO captions, NO labels, NO signs, NO watermarks, NO writing of any kind. Pure photographic visual only."
         
+        # Batch-convert all titles to visual scene descriptions in one Gemini call
+        all_topics = [title if len(title) <= 70 else title[:70]]
+        for slide in slides:
+            t = slide.get('title', '') or (slide.get('content_en', '') or slide.get('content', ''))[:80]
+            all_topics.append(t)
+        
+        try:
+            scene_prompt = (
+                "For each numbered topic below, write a SHORT (15-20 words max) description of a photographic scene "
+                "that visually represents the concept. Describe ONLY physical objects, people, settings, and lighting. "
+                "Do NOT include any words, text, labels, or title references in the description. "
+                "Return numbered descriptions in the same format.\n"
+                + "\n".join(f"{i+1}. {t}" for i, t in enumerate(all_topics))
+            )
+            scene_result = self._call_gemini(scene_prompt)
+            
+            import re as _re_scene
+            scene_descriptions = {}
+            for line in scene_result.strip().split('\n'):
+                line = _re_scene.sub(r'\*\*', '', line.strip())
+                if not line:
+                    continue
+                match = _re_scene.match(r'(\d+)[.\-\)]\s*(.+)', line)
+                if match:
+                    scene_descriptions[int(match.group(1))] = match.group(2).strip()
+            
+            print(f"DEBUG: Generated {len(scene_descriptions)} scene descriptions from Gemini")
+        except Exception as e:
+            print(f"Scene description generation failed: {e}, using generic scenes")
+            scene_descriptions = {}
+        
+        # Build cover prompt
+        cover_scene = scene_descriptions.get(1, "a modern professional workspace with natural lighting and clean desk")
+        image_prompts['cover'] = f"Photorealistic, {style_desc} aesthetic, high-quality photograph: {cover_scene}. 16:9 aspect ratio. {no_text_instruction}"
+        
+        # Build slide prompts
         for idx, slide in enumerate(slides):
-            slide_content = slide.get('content_en', '') or slide.get('content', '')
-            slide_title_raw = slide.get('title', '')
-            topic = slide_title_raw if slide_title_raw else slide_content[:80]
-            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality image visually representing the concept of: {topic}. {no_text_instruction}"
+            slide_scene = scene_descriptions.get(idx + 2, "a professional business environment with modern technology and warm lighting")
+            image_prompts[f'slide_{idx}'] = f"Photorealistic, {style_desc} aesthetic, high-quality photograph: {slide_scene}. {no_text_instruction}"
         
         # Generate ALL images in parallel using 2 concurrent workers
         # 2 workers avoids Google Imagen per-second burst limits while
