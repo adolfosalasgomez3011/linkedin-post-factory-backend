@@ -194,6 +194,8 @@ export function PostGenerator() {
   const [articleUploading, setArticleUploading] = useState(false)
   const [showPasteArea, setShowPasteArea] = useState(false)
   const [pasteBuffer, setPasteBuffer] = useState('')
+  const [generationError, setGenerationError] = useState<string | null>(null)
+  const isPaywallError = (msg: string) => /paywalled|paywall|paste the article|paste article text/i.test(msg)
   const [daysBack, setDaysBack] = useState(30)
   const selectedChannel = CHANNELS.find((item) => item.value === channel)
   const currentPillars = CHANNEL_PILLARS[channel] || []
@@ -351,6 +353,7 @@ export function PostGenerator() {
     setManualArticleLabel(null)
     setShowPasteArea(false)
     setPasteBuffer('')
+    setGenerationError(null)
   }
 
   const handleGenerate = async () => {
@@ -365,6 +368,7 @@ export function PostGenerator() {
     }
 
     setLoading(true)
+    setGenerationError(null)
     try {
       const result = await api.generatePost({
         channel,
@@ -398,7 +402,12 @@ export function PostGenerator() {
       alert('Post generated and saved successfully!')
     } catch (error) {
       console.error('Failed to generate post:', error)
-      alert(error instanceof Error ? error.message : 'Failed to generate post. Make sure the backend server is running.')
+      const msg = error instanceof Error ? error.message : 'Failed to generate post. Make sure the backend server is running.'
+      setGenerationError(msg)
+      if (isPaywallError(msg)) {
+        setShowPasteArea(true)
+        setTimeout(() => document.getElementById('paste-article-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
+      }
     } finally {
       setLoading(false)
     }
@@ -650,7 +659,7 @@ export function PostGenerator() {
                           </button>
 
                           {showPasteArea && (
-                            <div className="flex flex-col gap-1">
+                            <div id="paste-article-area" className="flex flex-col gap-1">
                               <Textarea
                                 placeholder="Paste the article content here…"
                                 className="min-h-[100px] text-xs"
@@ -722,6 +731,24 @@ export function PostGenerator() {
               Generates English and Spanish versions separately
             </p>
           </div>
+
+          {generationError && (
+            <div className={`rounded-md border p-3 text-sm ${
+              isPaywallError(generationError)
+                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                : 'border-red-200 bg-red-50 text-red-700'
+            }`}>
+              {isPaywallError(generationError) ? (
+                <>
+                  <p className="font-semibold mb-1">🔒 Article is paywalled</p>
+                  <p>{generationError.split('To generate')[0].trim()}</p>
+                  <p className="mt-1 font-medium">↓ Paste the article text below, then click Generate again.</p>
+                </>
+              ) : (
+                <p>❌ {generationError}</p>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <Button
