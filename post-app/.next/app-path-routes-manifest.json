@@ -1,0 +1,11 @@
+{
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
+  "/api/sources/route": "/api/sources",
+  "/api/topics/live/route": "/api/topics/live",
+  "/api/translate/route": "/api/translate",
+  "/demos/[postId]/page": "/demos/[postId]",
+  "/favicon.ico/route": "/favicon.ico",
+  "/page": "/",
+  "/sources/page": "/sources"
+}

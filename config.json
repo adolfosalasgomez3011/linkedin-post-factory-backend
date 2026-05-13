@@ -1,0 +1,366 @@
+{
+  "voice_guidelines": {
+    "forbidden_phrases": [
+      "I quit my job",
+      "I left corporate",
+      "my company",
+      "expert",
+      "guru",
+      "thought leader",
+      "I'm building GoalPraxis to solve"
+    ],
+    "required_language": {
+      "career_framing": [
+        "portfolio career",
+        "building ventures while exploring strategic opportunities",
+        "modern executive operating model",
+        "multiple value streams"
+      ],
+      "goalpraxis_mentions": [
+        "Co-founding GoalPraxis with partners who bring deep technology expertise",
+        "Building ventures",
+        "My role: operations strategy and business development"
+      ],
+      "positioning": [
+        "Operations & Technology Leader",
+        "C-Suite positioning",
+        "COO-track",
+        "Transforming mining performance"
+      ]
+    },
+    "tone": {
+      "style": "Direct, confident, authentic",
+      "perspective": "Proven operator sharing real insights",
+      "emotion": "Balanced - excited but grounded",
+      "technical_depth": "High but accessible"
+    }
+  },
+  "channel_profiles": {
+    "personal_career": {
+      "label": "Personal Career Channel",
+      "goal": "Position as a General Manager, COO, or senior Asset Management leader for LatAm mining",
+      "audience": [
+        "Mining CEOs and General Managers",
+        "COOs and VP Operations",
+        "Executive recruiters",
+        "Board-level decision makers"
+      ],
+      "cta_style": "conversation and strategic networking",
+      "do_not_mix": [
+        "direct company sales pitch",
+        "product catalog language",
+        "discount-driven promotion"
+      ]
+    },
+    "goalpraxis_company": {
+      "label": "GoalPraxis Company Channel",
+      "goal": "Generate trust and traction for mining asset tracking pilots and managed-service engagements",
+      "audience": [
+        "Mine superintendents and operations managers",
+        "Maintenance managers",
+        "Technology and innovation managers",
+        "Procurement leaders in medium-size mining operations"
+      ],
+      "cta_style": "pilot invitation and assessment request",
+      "do_not_mix": [
+        "personal job-seeking narrative",
+        "career transition messaging",
+        "personal portfolio positioning"
+      ]
+    },
+    "other": {
+      "label": "Other Channel",
+      "goal": "Support adjacent topics without mixing personal hiring narrative or GoalPraxis sales messaging",
+      "audience": [
+        "General professional network",
+        "Operations and technology peers",
+        "Industry learners"
+      ],
+      "cta_style": "discussion and idea exchange",
+      "do_not_mix": [
+        "hard sales CTA",
+        "active job seeking language"
+      ]
+    }
+  },
+  "channel_topics": {
+    "personal_career": [
+      {
+        "rank": 1,
+        "topic_name": "Decision cadence over dashboards: what COOs actually optimize",
+        "reasoning": "Executive audience responds to speed and decision quality framing.",
+        "suggested_pillar": "COO Readiness & Decision Systems",
+        "suggested_format": "Insight"
+      },
+      {
+        "rank": 2,
+        "topic_name": "Asset performance as a business system, not a maintenance KPI",
+        "reasoning": "Links operations outcomes with leadership accountability.",
+        "suggested_pillar": "Asset Management Excellence",
+        "suggested_format": "Story"
+      },
+      {
+        "rank": 3,
+        "topic_name": "Planning beats prediction when execution rhythm is broken",
+        "reasoning": "Contrarian angle with practical credibility.",
+        "suggested_pillar": "Executive Operations Leadership",
+        "suggested_format": "Contrarian"
+      },
+      {
+        "rank": 4,
+        "topic_name": "Alignment over complexity: 30-year lesson from mining operations",
+        "reasoning": "Authority narrative that positions senior leadership capability.",
+        "suggested_pillar": "Executive Operations Leadership",
+        "suggested_format": "Case Study"
+      },
+      {
+        "rank": 5,
+        "topic_name": "Visibility is not velocity: why reporting volume slows execution",
+        "reasoning": "High engagement through a familiar executive pain point.",
+        "suggested_pillar": "COO Readiness & Decision Systems",
+        "suggested_format": "Question"
+      },
+      {
+        "rank": 6,
+        "topic_name": "LatAm mining 2026: operating model shifts leaders should expect",
+        "reasoning": "Timely regional signal for hiring and strategic positioning.",
+        "suggested_pillar": "Mining Transformation in LatAm",
+        "suggested_format": "Insight"
+      },
+      {
+        "rank": 7,
+        "topic_name": "Five signs your operation is reactive and how to reset",
+        "reasoning": "Diagnostic format performs well for senior audiences.",
+        "suggested_pillar": "Career Narrative & Executive Presence",
+        "suggested_format": "How-To"
+      },
+      {
+        "rank": 8,
+        "topic_name": "Why the best GMs translate reliability into business language",
+        "reasoning": "Strong executive-positioning angle that performs well in leadership conversations.",
+        "suggested_pillar": "Asset Management Excellence",
+        "suggested_format": "Insight"
+      }
+    ],
+    "goalpraxis_company": [
+      {
+        "rank": 1,
+        "topic_name": "Shadow Fleet blind spot: when high-value assets disappear in plain sight",
+        "reasoning": "Strong pain-led opener for pilot conversations.",
+        "suggested_pillar": "Shadow Fleet Visibility",
+        "suggested_format": "Insight"
+      },
+      {
+        "rank": 2,
+        "topic_name": "What enterprise fleet systems miss in medium-size mines",
+        "reasoning": "Clear differentiation without direct competitor attack.",
+        "suggested_pillar": "Asset Tracking Business Case",
+        "suggested_format": "Contrarian"
+      },
+      {
+        "rank": 3,
+        "topic_name": "From zero visibility to operational control in a 3-week pilot",
+        "reasoning": "Speed-to-value is a strong buyer trigger.",
+        "suggested_pillar": "Pilot Results & Proof of Work",
+        "suggested_format": "Case Study"
+      },
+      {
+        "rank": 4,
+        "topic_name": "LoRaWAN + GPS architecture for rugged mining environments",
+        "reasoning": "Adds technical trust for innovation and maintenance managers.",
+        "suggested_pillar": "Mining Technology Adoption",
+        "suggested_format": "How-To"
+      },
+      {
+        "rank": 5,
+        "topic_name": "The dispatch ROI model: where 30% downtime reduction actually comes from",
+        "reasoning": "Finance-backed argument supports procurement and approval.",
+        "suggested_pillar": "Operational ROI for Medium Miners",
+        "suggested_format": "Data"
+      },
+      {
+        "rank": 6,
+        "topic_name": "How top miners operationalize asset tracking at scale",
+        "reasoning": "Social proof with an implementation focus.",
+        "suggested_pillar": "Mining Technology Adoption",
+        "suggested_format": "Insight"
+      },
+      {
+        "rank": 7,
+        "topic_name": "Predictive maintenance fails without predictable field execution",
+        "reasoning": "Contrarian angle tied to practical operations outcomes.",
+        "suggested_pillar": "Operational ROI for Medium Miners",
+        "suggested_format": "Contrarian"
+      },
+      {
+        "rank": 8,
+        "topic_name": "What medium miners can deploy now without waiting for enterprise platforms",
+        "reasoning": "Fast, practical, and attractive for managers looking for a low-friction pilot path.",
+        "suggested_pillar": "Asset Tracking Business Case",
+        "suggested_format": "How-To"
+      }
+    ],
+    "other": [
+      {
+        "rank": 1,
+        "topic_name": "What changed this month in industrial AI that matters to operators",
+        "reasoning": "Broad and timely with high relevance.",
+        "suggested_pillar": "technology",
+        "suggested_format": "Insight"
+      },
+      {
+        "rank": 2,
+        "topic_name": "Digital programs that fail quietly and how to catch them early",
+        "reasoning": "Universally useful and discussion-friendly.",
+        "suggested_pillar": "thought_leadership",
+        "suggested_format": "Question"
+      },
+      {
+        "rank": 3,
+        "topic_name": "A practical scorecard for operational technology pilots",
+        "reasoning": "Actionable and reusable framework style content.",
+        "suggested_pillar": "consulting",
+        "suggested_format": "How-To"
+      },
+      {
+        "rank": 4,
+        "topic_name": "The hidden cost of low-quality asset data",
+        "reasoning": "Data governance topic with real business impact.",
+        "suggested_pillar": "asset_management",
+        "suggested_format": "Data"
+      },
+      {
+        "rank": 5,
+        "topic_name": "Execution playbooks that outperform strategy decks",
+        "reasoning": "High engagement for leadership communities.",
+        "suggested_pillar": "entrepreneurship",
+        "suggested_format": "Story"
+      },
+      {
+        "rank": 6,
+        "topic_name": "Three weak signals worth monitoring in heavy industry",
+        "reasoning": "Trend-focused format invites comments and perspectives.",
+        "suggested_pillar": "thought_leadership",
+        "suggested_format": "Insight"
+      },
+      {
+        "rank": 7,
+        "topic_name": "When to build in-house vs partner for operational tech",
+        "reasoning": "Classic buy-vs-build decision topic with broad appeal.",
+        "suggested_pillar": "consulting",
+        "suggested_format": "Contrarian"
+      },
+      {
+        "rank": 8,
+        "topic_name": "The metric that tells you a digital initiative is actually being adopted",
+        "reasoning": "Useful, practical, and discussion-friendly across adjacent channels.",
+        "suggested_pillar": "thought_leadership",
+        "suggested_format": "Data"
+      }
+    ]
+  },
+  "content_pillars": {
+    "asset_management": {
+      "percentage": 25,
+      "topics": [
+        "Mobile fleet optimization",
+        "Process plant reliability",
+        "Asset lifecycle strategies",
+        "TCO analysis",
+        "Replacement planning",
+        "Maintenance excellence",
+        "Equipment performance"
+      ]
+    },
+    "technology": {
+      "percentage": 30,
+      "topics": [
+        "AI and machine learning",
+        "IoT implementation",
+        "Predictive maintenance",
+        "Digital transformation",
+        "Analytics and insights",
+        "CMMS/EAM systems",
+        "Automation trends"
+      ]
+    },
+    "consulting": {
+      "percentage": 10,
+      "topics": [
+        "McKinsey methodology",
+        "SPIN selling",
+        "Trusted advisor approach",
+        "Problem-solving frameworks",
+        "Professional services",
+        "Strategic selling"
+      ]
+    },
+    "entrepreneurship": {
+      "percentage": 25,
+      "topics": [
+        "Building GoalPraxis journey",
+        "Portfolio career reality",
+        "Business development",
+        "Self-employment at 50",
+        "Learning from building",
+        "Wins and failures"
+      ]
+    },
+    "thought_leadership": {
+      "percentage": 10,
+      "topics": [
+        "Future of mining",
+        "LATAM market trends",
+        "Industry predictions",
+        "Leadership perspectives",
+        "Operational excellence"
+      ]
+    }
+  },
+  "post_formats": [
+    "Personal Story",
+    "Technical Deep-Dive",
+    "Controversial Take",
+    "Data-Driven Insight",
+    "Weekly Reflection",
+    "Advice/How-To",
+    "Industry Analysis",
+    "Lesson Learned"
+  ],
+  "target_audience": {
+    "primary": [
+      "Mining operations executives",
+      "COO/VP Operations/GM roles",
+      "Hiring managers in mining"
+    ],
+    "secondary": [
+      "Technology vendors",
+      "Consulting firms",
+      "Executive recruiters"
+    ],
+    "tertiary": [
+      "Mining professionals",
+      "Investors",
+      "Strategic partners"
+    ]
+  },
+  "engagement_strategy": {
+    "optimal_length": "1200-2000 characters",
+    "hook_lines": 3,
+    "hashtags": "5-8 relevant (not spammy)",
+    "cta_types": ["Question", "Call to share", "Invitation to connect"],
+    "posting_schedule": {
+      "monday": "Asset Management OR Technology OR Entrepreneurship",
+      "wednesday": "Entrepreneurship OR Asset Management OR Consulting",
+      "friday": "Technology OR Digital transformation",
+      "sunday": "Personal reflection OR Industry thought leadership"
+    }
+  },
+  "quality_standards": {
+    "voice_match_threshold": 85,
+    "min_length": 800,
+    "max_length": 2500,
+    "required_elements": ["Hook", "Body", "CTA"],
+    "forbidden_patterns": ["Salesy", "Generic", "Over-promotional"]
+  }
+}
